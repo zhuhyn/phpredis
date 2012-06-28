@@ -53,6 +53,8 @@ typedef struct redis_pool_member_ {
     char *auth;
     size_t auth_len;
 
+    RedisSock *failover_sock;
+
 	struct redis_pool_member_ *next;
 
 } redis_pool_member;
@@ -73,7 +75,7 @@ redis_pool_new(TSRMLS_D) {
 
 PHPAPI void
 redis_pool_add(redis_pool *pool, RedisSock *redis_sock, int weight,
-                char *prefix, char *auth TSRMLS_DC) {
+                char *prefix, char *auth, RedisSock *failover_sock TSRMLS_DC) {
 
 	redis_pool_member *rpm = ecalloc(1, sizeof(redis_pool_member));
 	rpm->redis_sock = redis_sock;
@@ -84,6 +86,8 @@ redis_pool_add(redis_pool *pool, RedisSock *redis_sock, int weight,
 
     rpm->auth = auth;
     rpm->auth_len = (auth?strlen(auth):0);
+
+	rpm->failover_sock = failover_sock;
 
 	rpm->next = pool->head;
 	pool->head = rpm;
@@ -108,22 +112,32 @@ redis_pool_free(redis_pool *pool TSRMLS_DC) {
 	efree(pool);
 }
 
+static void
+redis_auth(RedisSock *sock, char *cmd, int cmd_len TSRMLS_DC) {
+
+    char *response;
+    int response_len;
+
+    if(redis_sock_write(sock, cmd, cmd_len TSRMLS_CC) >= 0) {
+        if ((response = redis_sock_read(sock, &response_len TSRMLS_CC))) {
+            efree(response);
+        }
+    }
+}
+
 void
 redis_pool_member_auth(redis_pool_member *rpm TSRMLS_DC) {
-    RedisSock *redis_sock = rpm->redis_sock;
-    char *response, *cmd;
-    int response_len, cmd_len;
+    char *cmd;
+    int cmd_len;
 
     if(!rpm->auth || !rpm->auth_len) { /* no password given. */
             return;
     }
     cmd_len = redis_cmd_format_static(&cmd, "AUTH", "s", rpm->auth, rpm->auth_len);
 
-    if(redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) >= 0) {
-            if ((response = redis_sock_read(redis_sock, &response_len TSRMLS_CC))) {
-                    efree(response);
-            }
-    }
+    redis_auth(rpm->redis_sock, cmd, cmd_len TSRMLS_CC);
+    if(rpm->failover_sock)
+        redis_auth(rpm->failover_sock, cmd, cmd_len TSRMLS_CC);
     efree(cmd);
 }
 
@@ -143,6 +157,9 @@ redis_pool_get_sock(redis_pool *pool, const char *key TSRMLS_DC) {
                     needs_auth = 1;
             }
             redis_sock_server_open(rpm->redis_sock, 0 TSRMLS_CC);
+            if(rpm->failover_sock)
+                redis_sock_server_open(rpm->failover_sock, 0 TSRMLS_CC);
+
             if(needs_auth) {
                 redis_pool_member_auth(rpm TSRMLS_CC);
             }
@@ -181,7 +198,7 @@ PS_OPEN_FUNC(redis)
 			int weight = 1;
 			double timeout = 86400.0;
 			int persistent = 0;
-            char *prefix = NULL, *auth = NULL, *persistent_id = NULL;
+            char *prefix = NULL, *auth = NULL, *persistent_id = NULL, *failover = NULL;
 
             /* translate unix: into file: */
 			if (!strncmp(save_path+i, "unix:", sizeof("unix:")-1)) {
@@ -232,6 +249,9 @@ PS_OPEN_FUNC(redis)
 				if (zend_hash_find(Z_ARRVAL_P(params), "auth", sizeof("auth"), (void **) &param) != FAILURE) {
 					auth = estrndup(Z_STRVAL_PP(param), Z_STRLEN_PP(param));
 				}
+				if (zend_hash_find(Z_ARRVAL_P(params), "failover", sizeof("failover"), (void **) &param) != FAILURE) {
+					failover = estrndup(Z_STRVAL_PP(param), Z_STRLEN_PP(param));
+				}
 
 				/* // not supported yet
 				if (zend_hash_find(Z_ARRVAL_P(params), "retry_interval", sizeof("retry_interval"), (void **) &param) != FAILURE) {
@@ -250,13 +270,25 @@ PS_OPEN_FUNC(redis)
 				return FAILURE;
 			}
 
-			RedisSock *redis_sock;
+			RedisSock *redis_sock, *failover_sock = NULL;
             if(url->path) { /* unix */
                     redis_sock = redis_sock_create(url->path, strlen(url->path), 0, timeout, persistent, persistent_id);
             } else {
                     redis_sock = redis_sock_create(url->host, strlen(url->host), url->port, timeout, persistent, persistent_id);
             }
-			redis_pool_add(pool, redis_sock, weight, prefix, auth TSRMLS_CC);
+
+            if(failover) {
+                short port = 6379;
+                char *p = strchr(failover, ':');
+                size_t sz = strlen(failover);
+                if(p) {
+                    port = atoi(p+1);
+                    sz = p - failover;
+                }
+                failover_sock = redis_sock_create(failover, sz, port, timeout, persistent, persistent_id);
+            }
+
+			redis_pool_add(pool, redis_sock, weight, prefix, auth, failover_sock TSRMLS_CC);
 
 			php_url_free(url);
 		}
@@ -307,37 +339,51 @@ redis_session_key(redis_pool_member *rpm, const char *key, int key_len, int *ses
 	return session;
 }
 
-
-/* {{{ PS_READ_FUNC
- */
-PS_READ_FUNC(redis)
+static int
+get_session(redis_pool_member *rpm, RedisSock *sock, const char *key, char **val, int *vallen)
 {
 	char *session, *cmd;
-	int session_len, cmd_len;
+	int session_len, cmd_len, ret;
 
-	redis_pool *pool = PS_GET_MOD_DATA();
-    redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
-	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL;
-	if(!rpm || !redis_sock){
-		return FAILURE;
-	}
-
-	/* send GET command */
+    /* send GET command */
 	session = redis_session_key(rpm, key, strlen(key), &session_len);
 	cmd_len = redis_cmd_format_static(&cmd, "GET", "s", session, session_len);
 	efree(session);
-	if(redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
+	if(redis_sock_write(sock, cmd, cmd_len TSRMLS_CC) < 0) {
 		efree(cmd);
 		return FAILURE;
 	}
 	efree(cmd);
 
 	/* read response */
-	if ((*val = redis_sock_read(redis_sock, vallen TSRMLS_CC)) == NULL) {
+	if ((*val = redis_sock_read(sock, vallen TSRMLS_CC)) == NULL) {
 		return FAILURE;
 	}
 
 	return SUCCESS;
+}
+
+/* {{{ PS_READ_FUNC
+ */
+PS_READ_FUNC(redis)
+{
+	int ret;
+
+	redis_pool *pool = PS_GET_MOD_DATA();
+    redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
+	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL, *failover_sock;
+	if(!rpm || !redis_sock){
+		return FAILURE;
+	}
+
+    /* read session from main server or failover. */
+    ret = get_session(rpm, redis_sock, key, val, vallen);
+    if(EG(exception) && rpm->failover_sock) {
+		zend_clear_exception(TSRMLS_C); /* clear exception flag. */
+        ret = get_session(rpm, rpm->failover_sock, key, val, vallen);
+    }
+
+    return ret;
 }
 /* }}} */
 
