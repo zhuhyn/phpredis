@@ -448,32 +448,22 @@ PS_WRITE_FUNC(redis)
 }
 /* }}} */
 
-/* {{{ PS_DESTROY_FUNC
- */
-PS_DESTROY_FUNC(redis)
+static int
+destroy_session(redis_pool_member *rpm, RedisSock *sock, const char *session, int session_len TSRMLS_DC)
 {
-	char *cmd, *response, *session;
-	int cmd_len, response_len, session_len;
-
-	redis_pool *pool = PS_GET_MOD_DATA();
-    redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
-	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL;
-	if(!rpm || !redis_sock){
-		return FAILURE;
-	}
+	char *cmd, *response;
+	int cmd_len, response_len;
 
     /* send DEL command */
-	session = redis_session_key(rpm, key, strlen(key), &session_len);
 	cmd_len = redis_cmd_format_static(&cmd, "DEL", "s", session, session_len);
-	efree(session);
-	if(redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
+	if(redis_sock_write(sock, cmd, cmd_len TSRMLS_CC) < 0) {
 		efree(cmd);
 		return FAILURE;
 	}
 	efree(cmd);
 
 	/* read response */
-	if ((response = redis_sock_read(redis_sock, &response_len TSRMLS_CC)) == NULL) {
+	if ((response = redis_sock_read(sock, &response_len TSRMLS_CC)) == NULL) {
 		return FAILURE;
 	}
 
@@ -484,6 +474,39 @@ PS_DESTROY_FUNC(redis)
 		efree(response);
 		return FAILURE;
 	}
+}
+
+/* {{{ PS_DESTROY_FUNC
+ */
+PS_DESTROY_FUNC(redis)
+{
+	char *session;
+	int session_len;
+    int ret;
+
+	redis_pool *pool = PS_GET_MOD_DATA();
+    redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
+	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL;
+	if(!rpm || !redis_sock){
+		return FAILURE;
+	}
+
+    /* disable exceptions */
+    redis_sock->nothrow = 1;
+
+    /* delete session from main server or failover. */
+	session = redis_session_key(rpm, key, strlen(key), &session_len);
+    ret = destroy_session(rpm, redis_sock, session, session_len TSRMLS_CC);
+    if(ret == FAILURE && rpm->failover_sock) {
+        ret = destroy_session(rpm, rpm->failover_sock, session, session_len TSRMLS_CC);
+    }
+	efree(session);
+
+    /* re-enable exceptions */
+    redis_sock->nothrow = 0;
+
+    return ret;
+
 }
 /* }}} */
 
