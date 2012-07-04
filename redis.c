@@ -359,7 +359,7 @@ PHPAPI int redis_sock_get(zval *id, RedisSock **redis_sock TSRMLS_DC, int no_thr
                                   sizeof("socket"), (void **) &socket) == FAILURE) {
     	// Throw an exception unless we've been requested not to
         if(!no_throw) {
-        	zend_throw_exception(redis_exception_ce, "Redis server went away", 0 TSRMLS_CC);
+            redis_throw_exception(*redis_sock, redis_exception_ce, "Redis server went away", 0 TSRMLS_CC);
         }
         return -1;
     }
@@ -369,7 +369,7 @@ PHPAPI int redis_sock_get(zval *id, RedisSock **redis_sock TSRMLS_DC, int no_thr
     if (!*redis_sock || resource_type != le_redis_sock) {
 		// Throw an exception unless we've been requested not to
     	if(!no_throw) {
-    		zend_throw_exception(redis_exception_ce, "Redis server went away", 0 TSRMLS_CC);
+			redis_throw_exception(*redis_sock, redis_exception_ce, "Redis server went away", 0 TSRMLS_CC);
     	}
 		return -1;
     }
@@ -569,7 +569,7 @@ PHPAPI int redis_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent) {
 	}
 
 	if (timeout < 0L || timeout > INT_MAX) {
-		zend_throw_exception(redis_exception_ce, "Invalid timeout", 0 TSRMLS_CC);
+	    redis_throw_exception(redis_sock, redis_exception_ce, "Invalid timeout", 0 TSRMLS_CC);
 		return FAILURE;
 	}
 
@@ -6123,7 +6123,7 @@ PHP_METHOD(Redis, _unserialize) {
 		zval *z_ret = NULL;
 		if(redis_unserialize(redis_sock, value, value_len, &z_ret TSRMLS_CC) == 0) {
 			// Badly formed input, throw an execption
-			zend_throw_exception(redis_exception_ce, "Invalid serialized data, or unserialization error", 0 TSRMLS_CC);
+		    redis_throw_exception(redis_sock, redis_exception_ce, "Invalid serialized data, or unserialization error", 0 TSRMLS_CC);
 			RETURN_FALSE;
 		}
 		RETURN_ZVAL(z_ret, 0, 1);

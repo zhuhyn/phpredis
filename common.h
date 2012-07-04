@@ -161,6 +161,7 @@ typedef struct {
     int            persistent;
     int            watching;
     char           *persistent_id;
+    int            nothrow;
 
     int            serializer;
     long           dbNumber;

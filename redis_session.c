@@ -340,7 +340,7 @@ redis_session_key(redis_pool_member *rpm, const char *key, int key_len, int *ses
 }
 
 static int
-get_session(redis_pool_member *rpm, RedisSock *sock, const char *key, char **val, int *vallen)
+get_session(redis_pool_member *rpm, RedisSock *sock, const char *key, char **val, int *vallen TSRMLS_DC)
 {
 	char *session, *cmd;
 	int session_len, cmd_len, ret;
@@ -377,42 +377,32 @@ PS_READ_FUNC(redis)
 	}
 
     /* read session from main server or failover. */
-    ret = get_session(rpm, redis_sock, key, val, vallen);
+    ret = get_session(rpm, redis_sock, key, val, vallen TSRMLS_CC);
     if(EG(exception) && rpm->failover_sock) {
 		zend_clear_exception(TSRMLS_C); /* clear exception flag. */
-        ret = get_session(rpm, rpm->failover_sock, key, val, vallen);
+        ret = get_session(rpm, rpm->failover_sock, key, val, vallen TSRMLS_CC);
     }
 
     return ret;
 }
 /* }}} */
 
-/* {{{ PS_WRITE_FUNC
- */
-PS_WRITE_FUNC(redis)
+static int
+set_session(redis_pool_member *rpm, RedisSock *sock, const char *session, int session_len, const char *val, int vallen TSRMLS_DC)
 {
-	char *cmd, *response, *session;
-	int cmd_len, response_len, session_len;
+	char *cmd, *response;
+	int cmd_len, response_len;
 
-	redis_pool *pool = PS_GET_MOD_DATA();
-    redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
-	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL;
-	if(!rpm || !redis_sock){
-		return FAILURE;
-	}
-
-	/* send SET command */
-	session = redis_session_key(rpm, key, strlen(key), &session_len);
+    /* send SET command */
 	cmd_len = redis_cmd_format_static(&cmd, "SETEX", "sds", session, session_len, INI_INT("session.gc_maxlifetime"), val, vallen);
-	efree(session);
-	if(redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
+	if(redis_sock_write(sock, cmd, cmd_len TSRMLS_CC) < 0) {
 		efree(cmd);
 		return FAILURE;
 	}
 	efree(cmd);
 
 	/* read response */
-	if ((response = redis_sock_read(redis_sock, &response_len TSRMLS_CC)) == NULL) {
+	if ((response = redis_sock_read(sock, &response_len TSRMLS_CC)) == NULL) {
 		return FAILURE;
 	}
 
@@ -423,6 +413,38 @@ PS_WRITE_FUNC(redis)
 		efree(response);
 		return FAILURE;
 	}
+}
+
+/* {{{ PS_WRITE_FUNC
+ */
+PS_WRITE_FUNC(redis)
+{
+    int ret;
+    char *session;
+    int session_len;
+
+	redis_pool *pool = PS_GET_MOD_DATA();
+    redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
+	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL;
+	if(!rpm || !redis_sock){
+		return FAILURE;
+	}
+
+    /* disable exceptions */
+    redis_sock->nothrow = 1;
+
+    /* write session to main server or failover. */
+	session = redis_session_key(rpm, key, strlen(key), &session_len);
+    ret = set_session(rpm, redis_sock, session, session_len, val, vallen TSRMLS_CC);
+    if(ret == FAILURE && rpm->failover_sock) {
+        ret = set_session(rpm, rpm->failover_sock, session, session_len, val, vallen TSRMLS_CC);
+    }
+	efree(session);
+
+    /* re-enable exceptions */
+    redis_sock->nothrow = 0;
+
+    return ret;
 }
 /* }}} */
 
