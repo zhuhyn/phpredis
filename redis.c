@@ -40,10 +40,6 @@
 
 #include "library.h"
 
-#define R_SUB_CALLBACK_CLASS_TYPE 1
-#define R_SUB_CALLBACK_FT_TYPE 2
-#define R_SUB_CLOSURE_TYPE 3
-
 int le_redis_sock;
 extern int le_redis_array;
 
@@ -440,6 +436,9 @@ PHP_MINIT_FUNCTION(redis)
     add_constant_long(redis_ce, "SERIALIZER_PHP", REDIS_SERIALIZER_PHP);
 #ifdef HAVE_REDIS_IGBINARY
     add_constant_long(redis_ce, "SERIALIZER_IGBINARY", REDIS_SERIALIZER_IGBINARY);
+#endif
+#ifdef HAVE_JSON
+    add_constant_long(redis_ce, "SERIALIZER_JSON", REDIS_SERIALIZER_JSON);
 #endif
 
 	zend_declare_class_constant_stringl(redis_ce, "AFTER", 5, "after", 5 TSRMLS_CC);
@@ -5681,6 +5680,9 @@ PHP_METHOD(Redis, setOption) {
                     if(val_long == REDIS_SERIALIZER_NONE
 #ifdef HAVE_REDIS_IGBINARY
 						 	|| val_long == REDIS_SERIALIZER_IGBINARY
+#endif
+#ifdef HAVE_JSON
+						 	|| val_long == REDIS_SERIALIZER_JSON
 #endif
 							|| val_long == REDIS_SERIALIZER_PHP) {
                             redis_sock->serializer = val_long;

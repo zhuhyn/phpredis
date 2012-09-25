@@ -2189,6 +2189,8 @@ class Redis_Test extends TestSuite
     }
 
     protected function sequence($mode) {
+		// Kill some keys as this is called multiple times
+		$this->redis->del('zkey1', 'zkey2', 'zKey5', 'zInter', 'zUnion');
 
 	    $ret = $this->redis->multi($mode)
 		    ->set('x', 42)
@@ -2649,6 +2651,7 @@ class Redis_Test extends TestSuite
 
 	    $i = 0;
 	    $this->assertTrue(is_array($ret));
+
 	    $this->assertTrue(is_long($ret[$i]) && $ret[$i] >= 0 && $ret[$i] <= 3); $i++; // deleting at most 3 keys
 	    $this->assertTrue($ret[$i++] === 1);
 	    $this->assertTrue($ret[$i++] === 1);
@@ -2769,6 +2772,17 @@ class Redis_Test extends TestSuite
 		    $this->checkSerializer(Redis::SERIALIZER_IGBINARY);
 		    $this->redis->setOption(Redis::OPT_PREFIX, "");
 	    }
+    }
+
+    public function testSerializerJSON() {
+        if(defined('Redis::SERIALIZER_JSON')) {
+            $this->checkSerializer(Redis::SERIALIZER_JSON);
+
+            // wITH PREFIX
+            $this->redis->setOption(Redis::OPT_PREFIX, "test:");
+            $this->checkSerializer(Redis::SERIALIZER_JSON);
+            $this->redis->setOption(Redis::OPT_PREFIX, "");
+        }
     }
 
     private function checkSerializer($mode) {
@@ -3241,7 +3255,15 @@ class Redis_Test extends TestSuite
     		1,1.5,'one',Array('this','is','an','array')
     	);
 
-    	foreach(Array(Redis::SERIALIZER_PHP, Redis::SERIALIZER_IGBINARY) as $mode) {
+        $serializers = Array(Redis::SERIALIZER_PHP);
+        if(defined('Redis::SERIALIZER_IGBINARY')) {
+            $serializers[] = Redis::SERIALIZER_IGBINARY;
+        }
+        if(defined('Redis::SERIALIZER_JSON')) {
+            $serializers[] = Redis::SERIALIZER_JSON;
+        }
+
+    	foreach($serializers as $mode) {
     		$vals_enc = Array();
 
     		// Pass them through redis so they're serialized

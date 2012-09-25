@@ -10,9 +10,20 @@
 #endif
 #include <ext/standard/php_smart_str.h>
 #include <ext/standard/php_var.h>
+
 #ifdef HAVE_REDIS_IGBINARY
 #include "igbinary/igbinary.h"
 #endif
+
+#ifdef HAVE_JSON
+	#include <ext/json/php_json.h>
+
+	// Define defualt depth if we don't have it
+	#ifndef JSON_PARSER_DEFAULT_DEPTH
+		#define JSON_PARSER_DEFAULT_DEPTH 512
+	#endif
+#endif
+
 #include <zend_exceptions.h>
 #include "php_redis.h"
 #include "library.h"
@@ -1315,6 +1326,22 @@ redis_serialize(RedisSock *redis_sock, zval *z, char **val, int *val_len TSRMLS_
 			}
 #endif
 			return 0;
+		case REDIS_SERIALIZER_JSON:
+#ifdef HAVE_JSON
+	#if PHP_VERSION_ID >= 50399
+			php_json_encode(&sstr, z, 0 TSRMLS_CC);
+	#else
+			php_json_encode(&sstr, z, TSRMLS_CC);
+	#endif
+
+			// Return our value and length
+			*val = sstr.c;
+			*val_len = (int)sstr.len;
+
+			// Success
+			return 1;
+#endif
+			return 0;
 	}
 	return 0;
 }
@@ -1365,7 +1392,21 @@ redis_unserialize(RedisSock *redis_sock, const char *val, int val_len, zval **re
 #endif
 			return 0;
 			break;
+#ifdef HAVE_JSON
+		case REDIS_SERIALIZER_JSON:
+			if(!*return_value) {
+				MAKE_STD_ZVAL(*return_value);
+			}
+#if PHP_VERSION_ID >= 50399
+			php_json_decode_ex(*return_value, val, val_len, PHP_JSON_OBJECT_AS_ARRAY, JSON_PARSER_DEFAULT_DEPTH TSRMLS_CC);
+#else
+			php_json_decode(*return_value, val, val_len, 1, JSON_PARSER_DEFAULT_DEPTH TSRMLS_CC);
+#endif
+			return 1;
+			break;
+#endif
 	}
+
 	return 0;
 }
 
