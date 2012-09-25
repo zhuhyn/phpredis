@@ -43,8 +43,6 @@ class TestSuite {
 		$methods = $rc->GetMethods(ReflectionMethod::IS_PUBLIC);
 
 		foreach($methods as $m) {
-            if(strtolower($m->name) != 'testserializerjson') continue;
-
 			$name = $m->name;
 			if(substr($name, 0, 4) !== 'test')
 				continue;
