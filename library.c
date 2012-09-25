@@ -1328,11 +1328,7 @@ redis_serialize(RedisSock *redis_sock, zval *z, char **val, int *val_len TSRMLS_
 			return 0;
 		case REDIS_SERIALIZER_JSON:
 #ifdef HAVE_JSON
-	#if PHP_VERSION_ID >= 50399
 			php_json_encode(&sstr, z, 0 TSRMLS_CC);
-	#else
-			php_json_encode(&sstr, z, TSRMLS_CC);
-	#endif
 
 			// Return our value and length
 			*val = sstr.c;
