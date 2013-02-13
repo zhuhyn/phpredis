@@ -608,6 +608,37 @@ PHPAPI void redis_info_response(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_s
     }
 }
 
+PHPAPI void redis_set_response(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab, void *ctx) {
+    char *resp;
+    int resp_len;
+
+    // Make sure we get a response that we can process
+    if((resp = redis_sock_read(redis_sock, &resp_len TSRMLS_CC)) == NULL) {
+        IF_MULTI_OR_PIPELINE() {
+            add_next_index_bool(z_tab, 0);
+            return;
+        }
+        RETURN_FALSE;
+    }
+
+    // The SET is successful if we either get '+' as a reply type byte (Redis <
+    // 2.8) or ":1" (Redis >= 2.8)
+    int success = *resp == '+' || (resp_len == 2 && resp[0]==':' && resp[1]=='1');
+
+    // Free our response
+    efree(resp);
+
+    IF_MULTI_OR_PIPELINE() {
+        add_next_index_bool(z_tab, success);
+    } else {
+        if(success) {
+            RETURN_TRUE;
+        } else {
+            RETURN_FALSE;
+        }
+    }
+}
+
 PHPAPI void redis_boolean_response_impl(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab, void *ctx, SuccessCallback success_callback) {
 
     char *response;
