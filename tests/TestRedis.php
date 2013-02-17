@@ -3438,6 +3438,28 @@ class Redis_Test extends TestSuite
 		$this->assertEquals(12.3, $this->redis->getOption(Redis::OPT_READ_TIMEOUT));
 	}
 
+	public function testGenericCall() {
+
+		$this->redis->delete('str', 'counter', 'list', 'set', 'zset', 'hash');
+
+		// initialise data
+		$this->redis->set('str', 'val');
+		$this->redis->incrBy('counter', 42);
+		$this->redis->rpush('list', 'a', 'b', 'c');
+		$this->redis->sadd('set', 'a', 'b', 'c');
+		$this->redis->hmset('hash', array('a' => 'x', 'b' => 'y', 'c' => 'z'));
+
+		// test various commands
+		$this->assertEquals("val", $this->redis->_call("GET str\r\n"));
+		$this->assertEquals("42", $this->redis->_call("GET counter\r\n"));
+		$this->assertEquals(43, $this->redis->_call("INCR counter\r\n"));
+		$this->assertEquals(array('a', 'b', 'c'), $this->redis->_call("LRANGE list 0 -1\r\n"));
+		$smembers = $this->redis->_call("SMEMBERS set\r\n");
+		sort($smembers);
+		$this->assertEquals(array('a', 'b', 'c'), $smembers);
+		$this->assertEquals(array('x', 'y', 'z', FALSE), $this->redis->_call("HMGET hash a b c d\r\n"));
+	}
+
 }
 
 exit(TestSuite::run("Redis_Test"));

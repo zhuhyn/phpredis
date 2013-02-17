@@ -142,6 +142,7 @@ PHP_METHOD(Redis, getLastError);
 PHP_METHOD(Redis, clearLastError);
 PHP_METHOD(Redis, _prefix);
 PHP_METHOD(Redis, _unserialize);
+PHP_METHOD(Redis, _call);
 
 PHP_METHOD(Redis, mset);
 PHP_METHOD(Redis, msetnx);

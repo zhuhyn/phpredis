@@ -226,6 +226,7 @@ static zend_function_entry redis_functions[] = {
 
      PHP_ME(Redis, _prefix, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, _unserialize, NULL, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, _call, NULL, ZEND_ACC_PUBLIC)
 
      PHP_ME(Redis, client, NULL, ZEND_ACC_PUBLIC)
 
@@ -6058,6 +6059,47 @@ PHP_METHOD(Redis, script) {
 	}
 	REDIS_PROCESS_RESPONSE(redis_read_variant_reply);
 }
+
+/* {{{ proto variant Redis::_call(string command)
+ */
+PHP_METHOD(Redis, _call)
+{
+	zval *object;
+	RedisSock *redis_sock;
+	char *cmd;
+	int cmd_len;
+
+	// Attempt to parse parameters
+	if(zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Os",
+							 &object, redis_ce, &cmd, &cmd_len) == FAILURE) {
+		RETURN_FALSE;
+	}
+
+	// Attempt to grab socket
+	if (redis_sock_get(object, &redis_sock TSRMLS_CC, 0) < 0) {
+		RETURN_FALSE;
+	}
+
+	// This is REDIS_PROCESS_REQUEST() without calling free(cmd);
+	IF_MULTI_OR_ATOMIC() {
+		if(redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
+			RETURN_FALSE;
+		}
+	}
+	IF_PIPELINE() {
+		PIPELINE_ENQUEUE_COMMAND(cmd, cmd_len);
+	}
+
+    IF_ATOMIC() {
+		if(redis_read_variant_reply(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL) < 0) {
+			RETURN_FALSE;
+		}
+	}
+    REDIS_PROCESS_RESPONSE(redis_read_variant_reply);
+}
+
+/* }}}
+ */
 
 /* {{{ proto DUMP key
  */

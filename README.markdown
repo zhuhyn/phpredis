@@ -2978,3 +2978,29 @@ serializing values, and you return something from redis in a LUA script that is 
 $redis->setOption(Redis::OPT_SERIALIZER, Redis::SERIALIZER_PHP);
 $redis->_unserialize('a:3:{i:0;i:1;i:1;i:2;i:2;i:3;}'); // Will return Array(1,2,3)
 ~~~
+
+
+## Other
+
+* [_call](#) - Executes a custom command
+
+### _call
+-----
+_**Description**_: Sends a custom command to Redis.
+
+This method is only useful if a particular command is not implemented by phpredis.
+`_call` is limited: the command is not sanitized or checked, the keys are not prefixed and the data is not serialized.
+
+##### *Parameters*
+*command* string.  The command to send to Redis, using the [Redis protocol](http://redis.io/topics/protocol).  
+
+##### *Return value*
+The result of the command as returned by Redis. Its type depends on the command.
+
+##### *Examples*
+~~~
+$redis->set('x', 'hello');
+$redis->_call("GET x\r\n"); // returns str(5) "hello"
+$redis->set('c', '100');
+$redis->_call("INCR c\r\n"); // returns int(101)
+~~~
