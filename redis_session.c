@@ -104,7 +104,7 @@ redis_pool_free(redis_pool *pool TSRMLS_DC) {
 	while(rpm) {
 		next = rpm->next;
 		redis_sock_disconnect(rpm->redis_sock TSRMLS_CC);
-		efree(rpm->redis_sock);
+		redis_free_socket(rpm->redis_sock);
 		if(rpm->prefix) efree(rpm->prefix);
 		if(rpm->auth) efree(rpm->auth);
 		efree(rpm);
@@ -377,7 +377,7 @@ PS_WRITE_FUNC(redis)
 	redis_pool *pool = PS_GET_MOD_DATA();
     redis_pool_member *rpm = redis_pool_get_sock(pool, key TSRMLS_CC);
 	RedisSock *redis_sock = rpm?rpm->redis_sock:NULL;
-	if(!rpm || !redis_sock){
+	if(!rpm || !redis_sock || redis_sock->status != REDIS_SOCK_STATUS_CONNECTED){
 		return FAILURE;
 	}
 
