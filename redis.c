@@ -5231,7 +5231,17 @@ PHPAPI int redis_sock_read_multibulk_multi_reply(INTERNAL_FUNCTION_PARAMETERS,
 
     redis_check_eof(redis_sock TSRMLS_CC);
 
-    php_stream_gets(redis_sock->stream, inbuf, 1024);
+    // Throw an exception in the case of a timeout/transmission error
+    if(php_stream_gets(redis_sock->stream, inbuf, 1024) == NULL) {
+        redis_stream_close(redis_sock TSRMLS_CC);
+        redis_sock->stream = NULL;
+        redis_sock->status = REDIS_SOCK_STATUS_FAILED;
+        redis_sock->mode = ATOMIC;
+        redis_sock->watching = 0;
+        zend_throw_exception(redis_exception_ce, "read error on connection", 0 TSRMLS_CC);
+        return -1;
+    }
+
     if(inbuf[0] != '*') {
         return -1;
     }
