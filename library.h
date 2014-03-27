@@ -53,11 +53,15 @@ redis_key_prefix(RedisSock *redis_sock, char **key, int *key_len TSRMLS_DC);
 PHPAPI int
 redis_unserialize(RedisSock *redis_sock, const char *val, int val_len, zval **return_value TSRMLS_DC);
 
+/* Sentinel command handlers */
+PHPAPI int redis_sock_read_sentinel_servers_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab);
+PHPAPI int redis_sock_read_sentinel_server_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab);
 
 /*
 * Variant Read methods, mostly to implement eval
 */
 
+const char *redis_reply_type_str(REDIS_REPLY_TYPE reply_type);
 PHPAPI int redis_read_reply_type(RedisSock *redis_sock, REDIS_REPLY_TYPE *reply_type, int *reply_info TSRMLS_DC);
 PHPAPI int redis_read_variant_line(RedisSock *redis_sock, REDIS_REPLY_TYPE reply_type, zval **z_ret TSRMLS_DC);
 PHPAPI int redis_read_variant_bulk(RedisSock *redis_sock, int size, zval **z_ret TSRMLS_DC);

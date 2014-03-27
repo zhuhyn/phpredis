@@ -45,6 +45,25 @@ typedef enum _REDIS_SCAN_TYPE {
     TYPE_ZSCAN
 } REDIS_SCAN_TYPE;
 
+/* SENTINEL subcommands */
+typedef enum _SENTINEL_CMD {
+    /* Standard directives */
+    SENTINEL_MASTERS,
+    SENTINEL_MASTER,
+    SENTINEL_SLAVES,
+    SENTINEL_MASTER_BY_NAME,
+    SENTINEL_RESET,
+    SENTINEL_FAILOVER,
+
+    /* Monitoring/Configuration */
+    SENTINEL_MONITOR,
+    SENTINEL_REMOVE,
+    SENTINEL_SET,
+
+    /* invalid/unknown */
+    SENTINEL_UNKNOWN
+} SENTINEL_CMD;
+
 /* PUBSUB subcommands */
 typedef enum _PUBSUB_TYPE {
     PUBSUB_CHANNELS,

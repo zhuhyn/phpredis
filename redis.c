@@ -280,6 +280,8 @@ static zend_function_entry redis_functions[] = {
      PHP_ME(Redis, wait, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, pubsub, NULL, ZEND_ACC_PUBLIC)
 
+     PHP_ME(Redis, sentinel, NULL, ZEND_ACC_PUBLIC)
+
      /* aliases */
      PHP_MALIAS(Redis, open, connect, NULL, ZEND_ACC_PUBLIC)
      PHP_MALIAS(Redis, popen, pconnect, NULL, ZEND_ACC_PUBLIC)
@@ -6296,6 +6298,373 @@ PHP_METHOD(Redis, pubsub) {
     }
 }
 
+/*
+ * SENTINEL variants command handlers
+ */
+
+/* Turn a SENTINEL subcommand into it's enum value */
+static SENTINEL_CMD sentinel_cmd_type(const char *subcmd) {
+    if(!strncasecmp(subcmd, "MASTERS", sizeof("MASTERS"))) {
+        return SENTINEL_MASTERS;
+    } else if(!strncasecmp(subcmd, "MASTER", sizeof("MASTER"))) {
+        return SENTINEL_MASTER;
+    } else if(!strncasecmp(subcmd, "SLAVES", sizeof("SLAVES"))) {
+        return SENTINEL_SLAVES;
+    } else if(!strncasecmp(subcmd, "GET-MASTER-ADDR-BY-NAME", sizeof("GET-MASTER-ADDR-BY-NAME"))) {
+        return SENTINEL_MASTER_BY_NAME;
+    } else if(!strncasecmp(subcmd, "RESET", sizeof("RESET"))) {
+        return SENTINEL_RESET;
+    } else if(!strncasecmp(subcmd, "FAILOVER", sizeof("FAILOVER"))) {
+        return SENTINEL_FAILOVER;
+    } else if(!strncasecmp(subcmd, "MONITOR", sizeof("MONITOR"))) {
+        return SENTINEL_MONITOR;
+    } else if(!strncasecmp(subcmd, "REMOVE", sizeof("REMOVE"))) {
+        return SENTINEL_REMOVE;
+    } else if(!strncasecmp(subcmd, "SET", sizeof("SET"))) {
+        return SENTINEL_SET;
+    } else {
+        return SENTINEL_UNKNOWN;
+    }
+}
+
+/* SENTINEL MASTERS */
+PHPAPI void
+sentinel_masters_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock) {
+    char *cmd;
+    int cmd_len;
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "s", "MASTERS", sizeof("MASTERS")-1);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        if(redis_sock_read_sentinel_servers_reply(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+                                                  NULL)<0) 
+        {
+            RETURN_FALSE;
+        }
+    }
+    REDIS_PROCESS_RESPONSE(redis_sock_read_sentinel_servers_reply);
+}
+
+/* SENTINEL MASTER */
+PHPAPI void
+sentinel_master_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *master,
+                    int master_len)
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master to query");
+        RETURN_FALSE;
+    }
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ss", "MASTER", sizeof("MASTER")-1,
+                                      master, master_len);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        if(redis_sock_read_sentinel_server_reply(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL)<0) {
+            RETURN_FALSE;
+        }
+    }
+    REDIS_PROCESS_RESPONSE(redis_sock_read_sentinel_server_reply);
+}
+
+/* SENTINEL SLAVES */
+PHPAPI void
+sentinel_slaves_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *master, int master_len) 
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master to query!");
+        RETURN_FALSE;
+    }
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ss", "SLAVES", sizeof("SLAVES")-1,
+                                      master, master_len);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        if(redis_sock_read_sentinel_servers_reply(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL)<0) {
+            RETURN_FALSE;
+        }
+    }
+    REDIS_PROCESS_RESPONSE(redis_sock_read_sentinel_servers_reply);
+}
+
+/* SENTINEL get-master-addr-by-name */
+PHPAPI void
+sentinel_master_by_name_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *master, int master_len) 
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master to query!");
+        RETURN_FALSE;
+    }
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ss", "get-master-addr-by-name", 
+                                      sizeof("get-master-addr-by-name")-1, master, master_len);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        if(redis_sock_read_multibulk_reply_raw(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL, NULL)<0) {
+            RETURN_FALSE;
+        }
+    }
+    REDIS_PROCESS_RESPONSE(redis_sock_read_multibulk_reply_raw);
+}
+
+/* SENTINEL reset */
+PHPAPI void
+sentinel_reset_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, const char *pattern,
+                   int pattern_len)
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!pattern || !pattern_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a pattern!");
+        RETURN_FALSE;
+    }
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ss", "RESET", sizeof("RESET")-1,
+                                      pattern, pattern_len);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        redis_long_response(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL, NULL);
+    }
+    REDIS_PROCESS_RESPONSE(redis_long_response);
+}
+
+/* SENTINEL failover */
+PHPAPI void
+sentinel_failover_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, const char *master,
+                      int master_len)
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master!");
+        RETURN_FALSE;
+    }
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ss", "FAILOVER", sizeof("FAILOVER")-1,
+                                      master, master_len);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        redis_boolean_response(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL, NULL);
+    }
+    REDIS_PROCESS_RESPONSE(redis_boolean_response);
+}
+
+/* SENTINEL monitor */
+PHPAPI void
+sentinel_monitor_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *master,
+                     int master_len, zval *z_ip, zval *z_port, long quorum)
+{
+    char *cmd;
+    int cmd_len;
+
+    // Sanity checks
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master!");
+        RETURN_FALSE;
+    }
+    if(!z_ip || Z_TYPE_P(z_ip) != IS_STRING) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a string for IP/host");
+        RETURN_FALSE;
+    }
+    if(!z_port || (Z_TYPE_P(z_port) != IS_LONG && Z_TYPE_P(z_port) != IS_STRING)) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a valid port as a string or long");
+        RETURN_FALSE;
+    }
+    if(quorum < 0) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a valid quorum value");
+        RETURN_FALSE;
+    }
+
+    if(Z_TYPE_P(z_port) == IS_LONG) {
+        cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "sssll", "MONITOR", sizeof("MONITOR")-1,
+                                          master, master_len, Z_STRVAL_P(z_ip), Z_STRLEN_P(z_ip),
+                                          Z_LVAL_P(z_port), quorum);
+    } else {
+        cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ssssl", "MONITOR", sizeof("MONITOR")-1,
+                                          master, master_len, Z_STRVAL_P(z_ip), Z_STRLEN_P(z_ip),
+                                          Z_STRVAL_P(z_port), Z_STRLEN_P(z_port), quorum);
+    }
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        redis_boolean_response(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL, NULL);
+    }
+    REDIS_PROCESS_RESPONSE(redis_boolean_response);
+}
+
+/* SENTINEL remove */
+PHPAPI void
+sentinel_remove_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *master,
+                    int master_len)
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master");
+        RETURN_FALSE;
+    }
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ss", "REMOVE", sizeof("REMOVE")-1,
+                                      master, master_len);
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        redis_boolean_response(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL, NULL);
+    }
+    REDIS_PROCESS_RESPONSE(redis_boolean_response);
+}
+
+/* SENTINEL set */
+PHPAPI void
+sentinel_set_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *master,
+                    int master_len, zval *z_option, zval *z_value)
+{
+    char *cmd;
+    int cmd_len;
+
+    if(!master || !master_len) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master name");
+        RETURN_FALSE;
+    }
+    if(!z_option || !Z_TYPE_P(z_option) || !Z_STRLEN_P(z_option)) {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify option name");
+        RETURN_FALSE;
+    }
+    if(!z_value || (Z_TYPE_P(z_option) != IS_STRING && Z_TYPE_P(z_option) != IS_LONG && 
+                    Z_TYPE_P(z_option) != IS_DOUBLE))
+    {
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a valid option value!");
+        RETURN_FALSE;
+    }
+
+    // Build command according to data type of z_value
+    switch(Z_TYPE_P(z_value)) {
+        case IS_STRING:
+            cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ssss", "SET", sizeof("SET")-1,
+                                              master, master_len, Z_STRVAL_P(z_option),
+                                              Z_STRLEN_P(z_option), Z_STRVAL_P(z_value),
+                                              Z_STRLEN_P(z_value));
+            break;
+        case IS_LONG:
+            cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "sssl", "SET", sizeof("SET")-1,
+                                              master, master_len, Z_STRVAL_P(z_option),
+                                              Z_STRLEN_P(z_option), Z_LVAL_P(z_value));
+            break;
+        case IS_DOUBLE:
+            cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "sssf", "SET", sizeof("SET")-1,
+                                              master, master_len, Z_STRVAL_P(z_option),
+                                              Z_STRLEN_P(z_option), Z_DVAL_P(z_value));
+            break;
+        
+    }
+
+    REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
+    IF_ATOMIC() {
+        redis_boolean_response(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, NULL, NULL);
+    }
+    REDIS_PROCESS_RESPONSE(redis_boolean_response);
+}
+
+/*
+ * {{{ proto Redis::Sentinel("masters")
+ *     proto Redis::Sentinel("master", string masterName)
+ *     proto Redis::Sentinel("slaves, string masterName)
+ *     proto Redis::Sentinel("get-master-addr-by-name", string masterName)
+ *     proto Redis::Sentinel("reset", string pattern)
+ *     proto Redis::Sentinel("failover", string masterName)
+ *
+ *     proto Redis::Sentinel("monitor", string name, string ip, long port, long quorum)
+ *     proto Redis::Sentinel("remove", string name)
+ *     proto Redis::Sentinel("set", string name, string option, string value)
+ */
+PHP_METHOD(Redis, sentinel) {
+    zval *object;
+    RedisSock *redis_sock;
+    char *kw, *arg1=NULL;
+    zval *z_arg1=NULL, *z_arg2=NULL;
+    int kw_len=0, arg1_len=0;
+    long quorum=-1;
+    SENTINEL_CMD type;
+
+    // Parse arguments
+    if(zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Os|szzl",
+                                    &object, redis_ce, &kw, &kw_len, &arg1, &arg1_len,
+                                    &z_arg1, &z_arg2, &quorum)==FAILURE)
+    {
+        RETURN_FALSE;
+    }
+
+    // Get the command type
+    if((type = sentinel_cmd_type(kw)) == SENTINEL_UNKNOWN) {
+        php_error_docref(NULL TSRMLS_CC, E_ERROR, "Error:  Unknown sentinel subcommand '%s'", kw);
+        RETURN_FALSE;
+    }
+    
+    // Grab our socket
+    if(redis_sock_get(object, &redis_sock TSRMLS_CC, 0)<0) {
+        RETURN_FALSE;
+    }
+
+    // Pass processing to the correct handler
+    switch(type) {
+        case SENTINEL_MASTERS:
+            sentinel_masters_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock);
+            break;
+        case SENTINEL_MASTER:
+            sentinel_master_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, 
+                                arg1, arg1_len);
+            break;
+        case SENTINEL_SLAVES:
+            sentinel_slaves_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, 
+                                arg1, arg1_len);
+            break;
+        case SENTINEL_MASTER_BY_NAME:
+            sentinel_master_by_name_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, 
+                                        redis_sock, arg1, arg1_len);
+            break;
+        case SENTINEL_RESET:
+            sentinel_reset_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock, 
+                               arg1, arg1_len);
+            break;
+        case SENTINEL_FAILOVER:
+            sentinel_failover_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+                                  arg1, arg1_len);
+            break;
+        case SENTINEL_MONITOR:
+            sentinel_monitor_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+                                 arg1, arg1_len, z_arg1, z_arg2, quorum);
+            break;
+        case SENTINEL_REMOVE:
+            sentinel_remove_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+                                arg1, arg1_len);
+            break;
+        case SENTINEL_SET:
+            sentinel_set_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+                             arg1, arg1_len, z_arg1, z_arg2);
+            break;
+        default:
+            /* Shouldn't ever happen */
+            RETURN_FALSE;
+    }
+}
+
 // Construct an EVAL or EVALSHA command, with option argument array and number of arguments that are keys parameter
 PHPAPI int
 redis_build_eval_cmd(RedisSock *redis_sock, char **ret, char *keyword, char *value, int val_len, zval *args, int keys_count TSRMLS_DC) {
@@ -6304,7 +6673,7 @@ redis_build_eval_cmd(RedisSock *redis_sock, char **ret, char *keyword, char *val
 	HashPosition hash_pos;
 	int cmd_len, args_count = 0;
 	int eval_cmd_count = 2;
-
+    
 	// If we've been provided arguments, we'll want to include those in our eval command
 	if(args != NULL) {
 		// Init our hash array value, and grab the count
