@@ -6472,6 +6472,7 @@ sentinel_monitor_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *
 {
     char *cmd;
     int cmd_len;
+    long port;
 
     // Sanity checks
     if(!master || !master_len) {
@@ -6483,7 +6484,7 @@ sentinel_monitor_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *
         RETURN_FALSE;
     }
     if(!z_port || (Z_TYPE_P(z_port) != IS_LONG && Z_TYPE_P(z_port) != IS_STRING)) {
-        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a valid port as a string or long");
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify port as a string or long");
         RETURN_FALSE;
     }
     if(quorum < 0) {
@@ -6491,15 +6492,22 @@ sentinel_monitor_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *
         RETURN_FALSE;
     }
 
-    if(Z_TYPE_P(z_port) == IS_LONG) {
-        cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "sssll", "MONITOR", sizeof("MONITOR")-1,
-                                          master, master_len, Z_STRVAL_P(z_ip), Z_STRLEN_P(z_ip),
-                                          Z_LVAL_P(z_port), quorum);
+    // Attempt to get the long value of a string if that's what we were passed
+    if(Z_TYPE_P(z_port) == IS_STRING) {
+        if(is_numeric_string(Z_STRVAL_P(z_port), Z_STRLEN_P(z_port), &port, NULL, 0)!=IS_LONG) {
+            php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Passed port does not contain a valid number!");
+            RETURN_FALSE;
+        }
     } else {
-        cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "ssssl", "MONITOR", sizeof("MONITOR")-1,
-                                          master, master_len, Z_STRVAL_P(z_ip), Z_STRLEN_P(z_ip),
-                                          Z_STRVAL_P(z_port), Z_STRLEN_P(z_port), quorum);
+        port = Z_LVAL_P(z_port);
     }
+
+    // Get numeric representation of our port
+    port = Z_TYPE_P(z_port) == IS_STRING ? atoi(Z_STRVAL_P(z_port)) : Z_LVAL_P(z_port);
+
+    cmd_len = redis_cmd_format_static(&cmd, "SENTINEL", "sssll", "MONITOR", sizeof("MONITOR")-1,
+                                      master, master_len, Z_STRVAL_P(z_ip), Z_STRLEN_P(z_ip),
+                                      port, quorum);
 
     REDIS_PROCESS_REQUEST(redis_sock, cmd, cmd_len);
     IF_ATOMIC() {
@@ -6543,12 +6551,12 @@ sentinel_set_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, char *mast
         php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a master name");
         RETURN_FALSE;
     }
-    if(!z_option || !Z_TYPE_P(z_option) || !Z_STRLEN_P(z_option)) {
+    if(!z_option || Z_TYPE_P(z_option) != IS_STRING || !Z_STRLEN_P(z_option)) {
         php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify option name");
         RETURN_FALSE;
     }
-    if(!z_value || (Z_TYPE_P(z_option) != IS_STRING && Z_TYPE_P(z_option) != IS_LONG && 
-                    Z_TYPE_P(z_option) != IS_DOUBLE))
+    if(!z_value || (Z_TYPE_P(z_value) != IS_STRING && Z_TYPE_P(z_value) != IS_LONG &&
+                    Z_TYPE_P(z_value) != IS_DOUBLE))
     {
         php_error_docref(NULL TSRMLS_CC, E_WARNING, "Warning:  Must specify a valid option value!");
         RETURN_FALSE;
