@@ -992,6 +992,9 @@ PHP_METHOD(Redis, set) {
                                           val, val_len);
     }
 
+    /* What's going on here ? */
+    php_printf("%s", cmd);
+
     /* Free our key or value if we prefixed/serialized */
     if(key_free) efree(key);
     if(val_free) STR_FREE(val);
