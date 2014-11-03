@@ -5230,9 +5230,12 @@ PHP_METHOD(Redis, multi)
 	char * response;
 	zval *object;
 	long multi_value = MULTI;
+    zend_bool is_null = 0;
 
-	if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "O|l",
-                                     &object, redis_ce, &multi_value) == FAILURE) {
+	if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "O|l!",
+                                     &object, redis_ce, &multi_value, &is_null) 
+                                     == FAILURE) 
+    {
         RETURN_FALSE;
     }
 
@@ -5242,11 +5245,19 @@ PHP_METHOD(Redis, multi)
         RETURN_FALSE;
     }
 
-	if(multi_value == MULTI || multi_value == PIPELINE) {
-		redis_sock->mode = multi_value;
+    /* Use our default (MULTI) if we were passed a NULL value, otherwise check
+     * it for MULTI or PIPELINE */
+	if (is_null) {
+        redis_sock->mode = MULTI;
+    } else if(multi_value == MULTI || multi_value == PIPELINE) {
+        redis_sock->mode = multi_value;
 	} else {
+        /* Invalid multi argument */
+        php_error_docref(NULL TSRMLS_CC, E_WARNING, 
+            "Invalid mode (must be Redis::MULTI, or Redis::PIPELINE)");
+
         RETURN_FALSE;
-	}
+    }
 
     redis_sock->current = NULL;
 
