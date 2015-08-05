@@ -37,6 +37,10 @@
 #include "ext/session/php_session.h"
 #endif
 
+#include <SAPI.h>
+#include <php_variables.h>
+#include <ext/standard/url.h>
+
 #include <ext/standard/php_smart_str.h>
 #include <ext/standard/php_var.h>
 #include <ext/standard/php_math.h>
@@ -716,19 +720,161 @@ PHP_METHOD(Redis, pconnect)
 }
 /* }}} */
 
+/* Control structure for connecting to redis */
+typedef struct redisConnectInfo {
+    char *host;
+    int host_len;
+    int port;
+    int dbnum;
+    char *auth;
+    int auth_len;
+
+    /* phpredis custom options */
+    char *persistent_id;
+    int persistent_id_len;
+    double timeout;
+    int retry_interval;
+} redisConnectInfo;
+
+/* Helper to validate a string is only numeric digits */
+static int only_digits(const char *p) {
+    while (*p) if (!isdigit(*p++)) return FAILURE;
+    return SUCCESS;
+}
+
+/* Helper to free parsed scheme info */
+static void connect_info_free(redisConnectInfo *p) {
+    if (p->host) 
+        efree(p->host);
+    if (p->auth) 
+        efree(p->auth);
+    if (p->persistent_id) 
+        efree(p->persistent_id);
+}
+
+/* Attempt to parse redis:// scheme into a control structure 
+ * Reference: http://www.iana.org/assignments/uri-schemes/prov/redis 
+ * Example: redis://user:secret@localhost:6379/0?foo=bar&qux=baz
+ *
+ * In addition to handling 'db-number', phpredis will also parse the following
+ * from the url part of the schem:
+ *      persistent-id
+ *      timeout
+ *      retry-interval
+ *
+ * It isn't specified in the spec but if the db-number is provided in the path
+ * and arguments, it will result in a 'last one wins' situation.
+ */
+static int 
+parse_redis_scheme(char *scheme, int scheme_len, redisConnectInfo *ret TSRMLS_DC) {
+    php_url *url;
+    zval *z_args, **z_ele;
+    HashTable *ht_args;
+    char *p;
+
+    /* First attempt to parse the overal info */
+    url = php_url_parse_ex(scheme, scheme_len);
+    if (!url) {
+        php_url_free(url);
+        return FAILURE; 
+    }
+
+    /* Set host if specified */  
+    if (url->host) {
+        ret->host_len = strlen(url->host);
+        ret->host = estrndup(url->host, ret->host_len); 
+    }
+
+    /* Set password if it's defined */
+    if (url->pass) {
+        ret->auth_len = strlen(url->pass);
+        ret->auth = estrndup(url->pass, ret->auth_len);
+    }
+
+    /* Handle db number in the path bit.  From the specification this should only
+     * have one element, and it has to be all numeric.  If the path is present we
+     * simply ignore anything else. */
+    if (url->path && *url->path) {
+        /* Find the end of our string or the next / and chop the string there */
+        p = url->path+1;
+        while(*p && *p != '/') p++;
+        *p = '\0';
+   
+        /* Validate the entry is numeric */
+        if (only_digits(url->path+1) == FAILURE) { 
+            zend_throw_exception(redis_exception_ce, "Redis db-number must be numeric", 0 TSRMLS_CC);
+            php_url_free(url);
+            return FAILURE;
+        }
+
+        /* Set the db-number */
+        ret->dbnum = atoi(url->path+1);
+    }
+
+    /* We can return now if there aren't any query args */
+    if (!url->query) return SUCCESS;
+
+    /* Prepare arg handler variable */
+    MAKE_STD_ZVAL(z_args);
+    array_init(z_args);
+
+    /* Parse the url part of the scheme */
+    sapi_module.treat_data(PARSE_STRING, estrdup(url->query), z_args TSRMLS_CC);
+    ht_args = Z_ARRVAL_P(z_args);
+
+    /* We're done with the url */
+    php_url_free(url);
+
+    /* Look for and validate db-number */ 
+    if (ZEND_HASH_FIND_STATIC(ht_args, "db-number", z_ele) == SUCCESS) {
+        /* Validate it's numeric */
+        if (only_digits(Z_STRVAL_PP(z_ele)) == FAILURE) {
+            zend_throw_exception(redis_exception_ce, "Redis db-number must be numeric", 0 TSRMLS_CC);
+            zval_dtor(z_args);
+            efree(z_args);
+            connect_info_free(ret);
+            return FAILURE;
+        }
+        ret->dbnum = atoi(Z_STRVAL_PP(z_ele));
+    }
+
+    /* Look for our password */
+    if (ZEND_HASH_FIND_STATIC(ht_args, "password", z_ele) == SUCCESS) {
+        if (ret->auth) efree(ret->auth);
+        ret->auth_len = Z_STRLEN_PP(z_ele);
+        ret->auth = estrndup(Z_STRVAL_PP(z_ele), ret->auth_len); 
+    }
+
+    /* Look for persistent-id */
+    if (ZEND_HASH_FIND_STATIC(ht_args, "persistent-id", z_ele) == SUCCESS) {
+        ret->persistent_id = estrndup(Z_STRVAL_PP(z_ele), Z_STRLEN_PP(z_ele));
+        ret->persistent_id_len = Z_STRLEN_PP(z_ele);
+    }
+
+    /* Look for timeout */
+    if (ZEND_HASH_FIND_STATIC(ht_args, "timeout", z_ele) == SUCCESS) {
+        ret->timeout = strtod(Z_STRVAL_PP(z_ele), &p);
+    }
+
+    /* Look for retry interval */
+    if (ZEND_HASH_FIND_STATIC(ht_args, "retry-interval", z_ele) == SUCCESS) {
+        ret->retry_interval = atoi(Z_STRVAL_PP(z_ele));
+    }
+
+    /* Clean up */
+    zval_dtor(z_args);
+    efree(z_args);
+
+    return SUCCESS;
+}
+
 PHP_REDIS_API int redis_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent) {
     zval *object;
     zval **socket;
-    int host_len, id;
-    char *host = NULL;
-    long port = -1;
-    long retry_interval = 0;
-
-    char *persistent_id = NULL;
-    int persistent_id_len = -1;
-
-    double timeout = 0.0;
+    redisConnectInfo info = {0};
     RedisSock *redis_sock  = NULL;
+    char *host=NULL;
+    int host_len=0, scheme = 0, id;
 
 #ifdef ZTS
     /* not sure how in threaded mode this works so disabled persistence at 
@@ -737,29 +883,37 @@ PHP_REDIS_API int redis_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent) {
 #endif
 
     if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), 
-                                     "Os|ldsl", &object, redis_ce, &host, 
-                                     &host_len, &port, &timeout, &persistent_id,
-                                     &persistent_id_len, &retry_interval) 
+                                     "O|sldsl", &object, redis_ce, &host, 
+                                     &host_len, &info.port, &info.timeout, 
+                                     &info.persistent_id, &info.persistent_id_len, 
+                                     &info.retry_interval) 
                                      == FAILURE) 
     {
         return FAILURE;
     }
 
-    if (timeout < 0L || timeout > INT_MAX) {
-        zend_throw_exception(redis_exception_ce, "Invalid timeout", 
-            0 TSRMLS_CC);
+    /* If a redis:// scheme is detected, attempt to parse and use that.  Otherwise
+     * set our redisConnectInfo data from the values passed to us */
+    if (IS_SCHEME_PREFIX(host, host_len)) {
+        memset(&info, 0, sizeof(redisConnectInfo));
+        if (parse_redis_scheme(host, host_len, &info TSRMLS_CC) == FAILURE) {
+            zend_throw_exception(redis_exception_ce, "Error parsing redis:// scheme", 0 TSRMLS_CC);
+            return FAILURE;
+        }
+        scheme = 1; 
+    } else {
+        info.host = host;
+        info.host_len = host_len;
+    }
+
+    if (info.timeout < 0L || info.timeout > INT_MAX) {
+        zend_throw_exception(redis_exception_ce, "Invalid timeout", 0 TSRMLS_CC);
         return FAILURE;
     }
 
-    if (retry_interval < 0L || retry_interval > INT_MAX) {
-        zend_throw_exception(redis_exception_ce, "Invalid retry interval", 
-            0 TSRMLS_CC);
+    if (info.retry_interval < 0L || info.retry_interval > INT_MAX) {
+        zend_throw_exception(redis_exception_ce, "Invalid retry interval", 0 TSRMLS_CC);
         return FAILURE;
-    }
-
-    /* If it's not a unix socket, set to default */
-    if(port == -1 && host_len && host[0] != '/') {
-        port = 6379;
     }
 
     /* if there is a redis sock already we have to remove it from the list */
@@ -774,13 +928,36 @@ PHP_REDIS_API int redis_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent) {
         }
     }
 
-    redis_sock = redis_sock_create(host, host_len, port, timeout, persistent, 
-        persistent_id, retry_interval, 0);
+    /* Create our socket */
+    redis_sock = redis_sock_create(info.host, info.host_len, info.port, 
+        info.timeout, persistent, info.persistent_id, info.retry_interval, 0);
 
+    /* Try to connect */
     if (redis_sock_server_open(redis_sock, 1 TSRMLS_CC) < 0) {
         redis_free_socket(redis_sock);
         return FAILURE;
     }
+
+    /* If we've got a password, attempt to authorize */
+    if (info.auth) {
+        redis_sock->auth = estrndup(info.auth, info.auth_len); 
+        if (redis_send_auth(redis_sock TSRMLS_CC) != 0) {
+            redis_free_socket(redis_sock);
+            return FAILURE;
+        }
+    }
+
+    /* If we've got a non-zero db, attempt to select it */
+    if (info.dbnum) {
+        redis_sock->dbNumber = info.dbnum;
+        if (redis_send_select(redis_sock TSRMLS_CC) != 0) {
+            redis_free_socket(redis_sock);
+            return FAILURE;
+        }
+    }
+
+    /* Free strings if it was parsed from a scheme */
+    if (scheme) connect_info_free(&info);
 
 #if PHP_VERSION_ID >= 50400
     id = zend_list_insert(redis_sock, le_redis_sock TSRMLS_CC);

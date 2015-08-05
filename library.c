@@ -40,8 +40,8 @@ extern zend_class_entry *redis_ce;
 extern zend_class_entry *redis_exception_ce;
 extern zend_class_entry *spl_ce_RuntimeException;
 
-/* Helper to reselect the proper DB number when we reconnect */
-static int reselect_db(RedisSock *redis_sock TSRMLS_DC) {
+/* Helper to select the proper DB number when we connect or reconnect */
+PHP_REDIS_API int redis_send_select(RedisSock *redis_sock TSRMLS_DC) {
     char *cmd, *response;
     int cmd_len, response_len;
 
@@ -49,26 +49,26 @@ static int reselect_db(RedisSock *redis_sock TSRMLS_DC) {
 
     if (redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
         efree(cmd);
-        return -1;
+        return FAILURE;
     }
 
     efree(cmd);
 
     if ((response = redis_sock_read(redis_sock, &response_len TSRMLS_CC)) == NULL) {
-        return -1;
+        return FAILURE;
     }
 
     if (strncmp(response, "+OK", 3)) {
         efree(response);
-        return -1;
+        return FAILURE;
     }
 
     efree(response);
-    return 0;
+    return SUCCESS;
 }
 
-/* Helper to resend AUTH <password> in the case of a reconnect */
-static int resend_auth(RedisSock *redis_sock TSRMLS_DC) {
+/* Helper to send or resend AUTH <password> on connect or reconnect */
+PHP_REDIS_API int redis_send_auth(RedisSock *redis_sock TSRMLS_DC) {
     char *cmd, *response;
     int cmd_len, response_len;
 
@@ -77,23 +77,23 @@ static int resend_auth(RedisSock *redis_sock TSRMLS_DC) {
 
     if (redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
         efree(cmd);
-        return -1;
+        return FAILURE;
     }
 
     efree(cmd);
 
     response = redis_sock_read(redis_sock, &response_len TSRMLS_CC);
     if (response == NULL) {
-        return -1;
+        return FAILURE;
     }
 
     if (strncmp(response, "+OK", 3)) {
         efree(response);
-        return -1;
+        return FAILURE;
     }
 
     efree(response);
-    return 0;
+    return SUCCESS;
 }
 
 /* Helper function that will throw an exception for a small number of ERR codes
@@ -178,12 +178,12 @@ PHP_REDIS_API int redis_check_eof(RedisSock *redis_sock, int no_throw TSRMLS_DC)
     /* We've connected if we have a count */
     if (count) {
         /* If we're using a password, attempt a reauthorization */
-        if (redis_sock->auth && resend_auth(redis_sock TSRMLS_CC) != 0) {
+        if (redis_sock->auth && redis_send_auth(redis_sock TSRMLS_CC) != SUCCESS) {
             return -1;
         }
 
         /* If we're using a non-zero db, reselect it */
-        if (redis_sock->dbNumber && reselect_db(redis_sock TSRMLS_CC) != 0) {
+        if (redis_sock->dbNumber && redis_send_select(redis_sock TSRMLS_CC) != SUCCESS) {
             return -1;
         }
     }
@@ -1546,7 +1546,16 @@ redis_sock_create(char *host, int host_len, unsigned short port, double timeout,
     RedisSock *redis_sock;
 
     redis_sock         = ecalloc(1, sizeof(RedisSock));
-    redis_sock->host   = estrndup(host, host_len);
+    
+    /* If an empty host is provided, default to "localhost".  This conforms
+     * with other Redis libraries and is how the redis:// scheme works. */
+    if(host && host_len) {
+        redis_sock->host = estrndup(host, host_len);
+    } else {
+        redis_sock->host = estrndup("localhost", sizeof("localhost")-1);
+    }
+
+    //redis_sock->host   = estrndup(host, host_len);
     redis_sock->stream = NULL;
     redis_sock->status = REDIS_SOCK_STATUS_DISCONNECTED;
     redis_sock->watching = 0;
@@ -1562,9 +1571,6 @@ redis_sock_create(char *host, int host_len, unsigned short port, double timeout,
     } else {
         redis_sock->persistent_id = NULL;
     }
-
-    memcpy(redis_sock->host, host, host_len);
-    redis_sock->host[host_len] = '\0';
 
     redis_sock->port    = port;
     redis_sock->timeout = timeout;
@@ -1614,8 +1620,7 @@ PHP_REDIS_API int redis_sock_connect(RedisSock *redis_sock TSRMLS_DC)
     if(redis_sock->host[0] == '/' && redis_sock->port < 1) {
         host_len = spprintf(&host, 0, "unix://%s", redis_sock->host);
     } else {
-        if(redis_sock->port == 0)
-            redis_sock->port = 6379;
+        if(redis_sock->port == 0) redis_sock->port = 6379;
         host_len = spprintf(&host, 0, "%s:%d", redis_sock->host, 
             redis_sock->port);
     }

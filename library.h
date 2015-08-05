@@ -69,6 +69,8 @@ redis_unserialize(RedisSock *redis_sock, const char *val, int val_len, zval **re
 
 PHP_REDIS_API void redis_free_socket(RedisSock *redis_sock);
 PHP_REDIS_API void redis_send_discard(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock);
+PHP_REDIS_API int redis_send_auth(RedisSock *redis_sock TSRMLS_DC);
+PHP_REDIS_API int redis_send_select(RedisSock *redis_sock TSRMLS_DC);
 PHP_REDIS_API int redis_sock_set_err(RedisSock *redis_sock, const char *msg, int msg_len);
 
 

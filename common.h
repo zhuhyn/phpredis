@@ -247,6 +247,14 @@ typedef enum _PUBSUB_TYPE {
 #define IS_LEX_ARG(s,l) \
     (l>0 && (*s=='(' || *s=='[' || (l==1 && (*s=='+' || *s=='-'))))
 
+/* Determine if a string starts with the reids scheme prefix */
+#define IS_SCHEME_PREFIX(s,l) \
+    (l >= sizeof("redis://") && !strncasecmp(s, "redis://", sizeof("redis://")-1))
+
+/* Simple helper macro for calling zend_hash_find with a static string */
+#define ZEND_HASH_FIND_STATIC(ht_arr, key, retval) \
+    zend_hash_find(ht_arr, key, sizeof(key), (void**)&retval)
+
 typedef enum {ATOMIC, MULTI, PIPELINE} redis_mode;
 
 typedef struct fold_item {
