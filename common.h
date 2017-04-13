@@ -8,8 +8,15 @@
 
 #include <ext/standard/php_var.h>
 #include <ext/standard/php_math.h>
+
 #if (PHP_MAJOR_VERSION < 7)
 #include <ext/standard/php_smart_str.h>
+
+/* This macro simply pases through to zval_ptr_dtor in php5, which will
+ * destroy any allocated zval value and efree the zval itself when the
+ * refcount reaches 0 */
+#define PHPREDIS_FREE_ZVAL(zv) zval_ptr_dtor(&zv);
+
 typedef smart_str smart_string;
 #define smart_string_0(x) smart_str_0(x)
 #define smart_string_appendc(dest, c) smart_str_appendc(dest, c)
@@ -377,6 +384,18 @@ typedef int strlen_t;
 #include <zend_smart_str.h>
 #include <ext/standard/php_smart_string.h>
 typedef size_t strlen_t;
+
+/* php7 mostly uses stack allocated zval variables and no longer has the
+ * MAKE_STD_ZVAL macro.  This macro creates a stack allocated alias zval
+ * variable and points the requested variable to it. */
+#define MAKE_STD_ZVAL(zv) \
+    zval _##zv##_stack; \
+    zv = &_##zv##_stack;
+
+/* Companion to the above macro which in php7 that will simply destroy
+ * the zval value, as the actual zval lives on the stack */
+#define PHPREDIS_FREE_ZVAL(zv) zval_dtor(zv);
+
 #endif
 
 /* NULL check so Eclipse doesn't go crazy */
@@ -536,7 +555,7 @@ typedef enum _PUBSUB_TYPE {
         REDIS_PROCESS_RESPONSE_CLOSURE(resp_func, ctx) \
     }
 
-/* Process a command but with a specific command building function 
+/* Process a command but with a specific command building function
  * and keyword which is passed to us*/
 #define REDIS_PROCESS_KW_CMD(kw, cmdfunc, resp_func) \
     RedisSock *redis_sock; char *cmd; int cmd_len; void *ctx=NULL; \

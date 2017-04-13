@@ -865,7 +865,7 @@ PHP_METHOD(RedisArray, select)
 /* MGET will distribute the call to several nodes and regroup the values. */
 PHP_METHOD(RedisArray, mget)
 {
-    zval *object, *z_keys, z_argarray, *data, z_ret, *z_cur, z_tmp_array, *z_tmp;
+    zval *object, *z_keys, *z_argarray, *data, *z_ret, *z_cur, *z_tmp_array, *z_tmp;
     int i, j, n;
     RedisArray *ra;
     int *pos, argc, *argc_each;
@@ -883,7 +883,6 @@ PHP_METHOD(RedisArray, mget)
 				     &object, redis_array_ce, &z_keys) == FAILURE) {
         RETURN_FALSE;
     }
-
 
     /* init data structures */
     h_keys = Z_ARRVAL_P(z_keys);
@@ -928,7 +927,9 @@ PHP_METHOD(RedisArray, mget)
         argv[i++] = data;
     } ZEND_HASH_FOREACH_END();
 
-    array_init(&z_tmp_array);
+    MAKE_STD_ZVAL(z_argarray);
+    MAKE_STD_ZVAL(z_tmp_array);
+    array_init(z_tmp_array);
 
     /* calls */
     for(n = 0; n < ra->count; ++n) { /* for each node */
@@ -936,39 +937,34 @@ PHP_METHOD(RedisArray, mget)
         if(!argc_each[n]) continue;
 
         /* copy args for MGET call on node. */
-        array_init(&z_argarray);
+        array_init(z_argarray);
 
         for(i = 0; i < argc; ++i) {
             if(pos[i] != n) continue;
 
-#if (PHP_MAJOR_VERSION < 7)
             MAKE_STD_ZVAL(z_tmp);
-#else
-            zval zv;
-            z_tmp = &zv;
-#endif
-
             ZVAL_ZVAL(z_tmp, argv[i], 1, 0);
-            add_next_index_zval(&z_argarray, z_tmp);
+            add_next_index_zval(z_argarray, z_tmp);
         }
 
-        zval z_fun;
         /* prepare call */
+        zval z_fun;
         ZVAL_STRINGL(&z_fun, "MGET", 4);
 
         /* call MGET on the node */
-        call_user_function(&redis_ce->function_table, &ra->redis[n], &z_fun, &z_ret, 1, &z_argarray);
+        MAKE_STD_ZVAL(z_ret);
+        call_user_function(&redis_ce->function_table, &ra->redis[n], &z_fun, z_ret, 1, z_argarray);
         zval_dtor(&z_fun);
 
         /* cleanup args array */
-        zval_dtor(&z_argarray);
+        PHPREDIS_FREE_ZVAL(z_argarray);
 
         /* Error out if we didn't get a proper response */
-        if (Z_TYPE(z_ret) != IS_ARRAY) {
+        if (Z_TYPE_P(z_ret) != IS_ARRAY) {
             /* cleanup */
-            zval_dtor(&z_ret);
-            zval_dtor(&z_tmp_array);
-	    efree(argv);
+            PHPREDIS_FREE_ZVAL(z_ret);
+            PHPREDIS_FREE_ZVAL(z_tmp_array);
+            efree(argv);
             efree(pos);
             efree(argc_each);
 
@@ -979,39 +975,30 @@ PHP_METHOD(RedisArray, mget)
         for(i = 0, j = 0; i < argc; ++i) {
             if(pos[i] != n) continue;
 
-            z_cur = zend_hash_index_find(Z_ARRVAL(z_ret), j++);
+            z_cur = zend_hash_index_find(Z_ARRVAL_P(z_ret), j++);
 
-#if (PHP_MAJOR_VERSION < 7)
             MAKE_STD_ZVAL(z_tmp);
-#else
-            zval zv;
-            z_tmp = &zv;
-#endif
             ZVAL_ZVAL(z_tmp, z_cur, 1, 0);
-            add_index_zval(&z_tmp_array, i, z_tmp);
+            add_index_zval(z_tmp_array, i, z_tmp);
         }
 
-        zval_dtor(&z_ret);
+        PHPREDIS_FREE_ZVAL(z_ret);
     }
 
     array_init(return_value);
+
     /* copy temp array in the right order to return_value */
     for(i = 0; i < argc; ++i) {
-        z_cur = zend_hash_index_find(Z_ARRVAL(z_tmp_array), i);
+        z_cur = zend_hash_index_find(Z_ARRVAL_P(z_tmp_array), i);
 
-#if (PHP_MAJOR_VERSION < 7)
         MAKE_STD_ZVAL(z_tmp);
-#else
-        zval zv;
-        z_tmp = &zv;
-#endif
-
         ZVAL_ZVAL(z_tmp, z_cur, 1, 0);
         add_next_index_zval(return_value, z_tmp);
     }
 
     /* cleanup */
-    zval_dtor(&z_tmp_array);
+    PHPREDIS_FREE_ZVAL(z_argarray);
+    PHPREDIS_FREE_ZVAL(z_tmp_array);
     efree(argv);
     efree(pos);
     efree(argc_each);
