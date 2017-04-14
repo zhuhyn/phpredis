@@ -1043,7 +1043,7 @@ PHP_METHOD(RedisCluster, keys) {
     strlen_t pat_len;
     char *pat, *cmd;
     clusterReply *resp;
-    zval zv, *z_ret = &zv;
+    zval *z_ret;
     int i, pat_free, cmd_len;
 
     if(zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &pat, &pat_len)
@@ -1057,6 +1057,7 @@ PHP_METHOD(RedisCluster, keys) {
     cmd_len = redis_cmd_format_static(&cmd, "KEYS", "s", pat, pat_len);
     if(pat_free) efree(pat);
 
+    PHPREDIS_STD_ZVAL(z_ret);
     array_init(z_ret);
 
     /* Treat as readonly */
@@ -2078,10 +2079,11 @@ PHP_METHOD(RedisCluster, _unserialize) {
 PHP_METHOD(RedisCluster, _masters) {
     redisCluster *c = GET_CONTEXT();
     redisClusterNode *node;
-    zval zv, *z_ret = &zv;
+    zval *z_ret;
     char *host;
     short port;
 
+    PHPREDIS_STD_ZVAL(z_ret);
     array_init(z_ret);
 
     for(zend_hash_internal_pointer_reset(c->nodes);

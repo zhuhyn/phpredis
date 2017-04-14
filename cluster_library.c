@@ -2018,7 +2018,7 @@ PHP_REDIS_API int cluster_scan_resp(INTERNAL_FUNCTION_PARAMETERS, redisCluster *
 PHP_REDIS_API void cluster_info_resp(INTERNAL_FUNCTION_PARAMETERS, redisCluster *c,
                               void *ctx)
 {
-    zval zv, *z_result = &zv;
+    zval *z_result;
     char *info;
 
     // Read our bulk response
@@ -2028,6 +2028,7 @@ PHP_REDIS_API void cluster_info_resp(INTERNAL_FUNCTION_PARAMETERS, redisCluster 
     }
 
     /* Parse response, free memory */
+    PHPREDIS_STD_ZVAL(z_result);
     redis_parse_info_response(info, z_result);
     efree(info);
 
