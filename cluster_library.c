@@ -1809,7 +1809,6 @@ PHP_REDIS_API void cluster_unsub_resp(INTERNAL_FUNCTION_PARAMETERS,
 /* Recursive MULTI BULK -> PHP style response handling */
 static void cluster_mbulk_variant_resp(clusterReply *r, zval *z_ret)
 {
-    zval zv, *z_sub_ele = &zv;
     int i;
 
     switch(r->type) {
@@ -1827,16 +1826,16 @@ static void cluster_mbulk_variant_resp(clusterReply *r, zval *z_ret)
                 add_next_index_null(z_ret);
             }
             break;
-        case TYPE_MULTIBULK:
-#if (PHP_MAJOR_VERSION < 7)
-            MAKE_STD_ZVAL(z_sub_ele);
-#endif
+        case TYPE_MULTIBULK: {
+            zval *z_sub_ele;
+            PHPREDIS_STD_ZVAL(z_sub_ele);
             array_init(z_sub_ele);
             for(i=0;i<r->elements;i++) {
                 cluster_mbulk_variant_resp(r->element[i], z_sub_ele);
             }
             add_next_index_zval(z_ret, z_sub_ele);
             break;
+        }
         default:
             add_next_index_bool(z_ret, 0);
             break;
@@ -1924,7 +1923,7 @@ PHP_REDIS_API void cluster_variant_resp(INTERNAL_FUNCTION_PARAMETERS, redisClust
 PHP_REDIS_API void cluster_gen_mbulk_resp(INTERNAL_FUNCTION_PARAMETERS,
                                    redisCluster *c, mbulk_cb cb, void *ctx)
 {
-    zval zv, *z_result = &zv;
+    zval *z_result;
 
     /* Return FALSE if we didn't get a multi-bulk response */
     if (c->reply_type != TYPE_MULTIBULK) {
@@ -1932,9 +1931,7 @@ PHP_REDIS_API void cluster_gen_mbulk_resp(INTERNAL_FUNCTION_PARAMETERS,
     }
 
     /* Allocate our array */
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_result);
-#endif
+    PHPREDIS_STD_ZVAL(z_result);
     array_init(z_result);
 
     /* Consume replies as long as there are more than zero */
@@ -2047,7 +2044,7 @@ PHP_REDIS_API void cluster_client_list_resp(INTERNAL_FUNCTION_PARAMETERS, redisC
                                      void *ctx)
 {
     char *info;
-    zval zv, *z_result = &zv;
+    zval *z_result;
 
     /* Read the bulk response */
     info = redis_sock_read_bulk_reply(c->cmd_sock, c->reply_len TSRMLS_CC);
@@ -2055,9 +2052,7 @@ PHP_REDIS_API void cluster_client_list_resp(INTERNAL_FUNCTION_PARAMETERS, redisC
         CLUSTER_RETURN_FALSE(c);
     }
 
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_result);
-#endif
+    PHPREDIS_STD_ZVAL(z_result);
 
     /* Parse it and free the bulk string */
     redis_parse_client_list_response(info, z_result);

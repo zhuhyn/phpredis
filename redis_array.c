@@ -604,10 +604,8 @@ static void multihost_distribute(INTERNAL_FUNCTION_PARAMETERS, const char *metho
 
 	array_init(return_value);
 	for(i = 0; i < ra->count; ++i) {
-        zval zv, *z_tmp = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-		MAKE_STD_ZVAL(z_tmp);
-#endif
+        zval *z_tmp;
+        PHPREDIS_STD_ZVAL(z_tmp);
 
 		/* Call each node in turn */
         call_user_function(&redis_ce->function_table, &ra->redis[i], &z_fun, z_tmp, 0, NULL);
@@ -679,11 +677,8 @@ PHP_METHOD(RedisArray, keys)
 
 	/* Iterate our RedisArray nodes */
 	for(i=0; i<ra->count; ++i) {
-        zval zv, *z_tmp = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-		/* Return for this node */
-		MAKE_STD_ZVAL(z_tmp);
-#endif
+        zval *z_tmp;
+        PHPREDIS_STD_ZVAL(z_tmp);
 
 		/* Call KEYS on each node */
         call_user_function(&redis_ce->function_table, &ra->redis[i], &z_fun, z_tmp, 1, z_args);
@@ -719,10 +714,8 @@ PHP_METHOD(RedisArray, getOption)
 
 	array_init(return_value);
 	for(i = 0; i < ra->count; ++i) {
-        zval zv, *z_tmp = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-		MAKE_STD_ZVAL(z_tmp);
-#endif
+        zval *z_tmp;
+        PHPREDIS_STD_ZVAL(z_tmp);
 
 		/* Call each node in turn */
         call_user_function(&redis_ce->function_table, &ra->redis[i], &z_fun, z_tmp, 1, z_args);
@@ -759,10 +752,8 @@ PHP_METHOD(RedisArray, setOption)
 
 	array_init(return_value);
 	for(i = 0; i < ra->count; ++i) {
-        zval zv, *z_tmp = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-		MAKE_STD_ZVAL(z_tmp);
-#endif
+        zval *z_tmp;
+        PHPREDIS_STD_ZVAL(z_tmp);
 
 		/* Call each node in turn */
         call_user_function(&redis_ce->function_table, &ra->redis[i], &z_fun, z_tmp, 2, z_args);
@@ -797,10 +788,8 @@ PHP_METHOD(RedisArray, select)
 
 	array_init(return_value);
 	for(i = 0; i < ra->count; ++i) {
-        zval zv, *z_tmp = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-		MAKE_STD_ZVAL(z_tmp);
-#endif
+        zval *z_tmp;
+        PHPREDIS_STD_ZVAL(z_tmp);
 
 		/* Call each node in turn */
         call_user_function(&redis_ce->function_table, &ra->redis[i], &z_fun, z_tmp, 1, z_args);
@@ -927,7 +916,7 @@ PHP_METHOD(RedisArray, mget)
         argv[i++] = data;
     } ZEND_HASH_FOREACH_END();
 
-    MAKE_STD_ZVAL(z_tmp_array);
+    PHPREDIS_STD_ZVAL(z_tmp_array);
     array_init(z_tmp_array);
 
     /* calls */
@@ -936,13 +925,13 @@ PHP_METHOD(RedisArray, mget)
         if(!argc_each[n]) continue;
 
         /* copy args for MGET call on node. */
-        MAKE_STD_ZVAL(z_argarray);
+        PHPREDIS_STD_ZVAL(z_argarray);
         array_init(z_argarray);
 
         for(i = 0; i < argc; ++i) {
             if(pos[i] != n) continue;
 
-            MAKE_STD_ZVAL(z_tmp);
+            PHPREDIS_STD_ZVAL(z_tmp);
             ZVAL_ZVAL(z_tmp, argv[i], 1, 0);
             add_next_index_zval(z_argarray, z_tmp);
         }
@@ -952,7 +941,7 @@ PHP_METHOD(RedisArray, mget)
         ZVAL_STRINGL(&z_fun, "MGET", 4);
 
         /* call MGET on the node */
-        MAKE_STD_ZVAL(z_ret);
+        PHPREDIS_STD_ZVAL(z_ret);
         call_user_function(&redis_ce->function_table, &ra->redis[n], &z_fun, z_ret, 1, z_argarray);
         zval_dtor(&z_fun);
 
@@ -977,7 +966,7 @@ PHP_METHOD(RedisArray, mget)
 
             z_cur = zend_hash_index_find(Z_ARRVAL_P(z_ret), j++);
 
-            MAKE_STD_ZVAL(z_tmp);
+            PHPREDIS_STD_ZVAL(z_tmp);
             ZVAL_ZVAL(z_tmp, z_cur, 1, 0);
             add_index_zval(z_tmp_array, i, z_tmp);
         }
@@ -991,7 +980,7 @@ PHP_METHOD(RedisArray, mget)
     for(i = 0; i < argc; ++i) {
         z_cur = zend_hash_index_find(Z_ARRVAL_P(z_tmp_array), i);
 
-        MAKE_STD_ZVAL(z_tmp);
+        PHPREDIS_STD_ZVAL(z_tmp);
         ZVAL_ZVAL(z_tmp, z_cur, 1, 0);
         add_next_index_zval(return_value, z_tmp);
     }
@@ -1072,14 +1061,14 @@ PHP_METHOD(RedisArray, mset)
         int found = 0;
 
         /* Array for calling MSET */
-        MAKE_STD_ZVAL(z_argarray);
+        PHPREDIS_STD_ZVAL(z_argarray);
         array_init(z_argarray);
 
         /* copy args */
         for(i = 0; i < argc; ++i) {
             if(pos[i] != n) continue;
 
-            MAKE_STD_ZVAL(z_tmp);
+            PHPREDIS_STD_ZVAL(z_tmp);
             ZVAL_ZVAL(z_tmp, argv[i], 1, 0);
             add_assoc_zval_ex(z_argarray, keys[i], key_lens[i], z_tmp);
             found++;
@@ -1099,7 +1088,7 @@ PHP_METHOD(RedisArray, mset)
         ZVAL_STRINGL(&z_mset, "MSET", 4);
 
         /* call */
-        MAKE_STD_ZVAL(z_ret);
+        PHPREDIS_STD_ZVAL(z_ret);
         call_user_function(&redis_ce->function_table, &ra->redis[n], &z_mset, z_ret, 1, z_argarray);
         zval_dtor(&z_mset);
         PHPREDIS_FREE_ZVAL(z_ret);
@@ -1161,12 +1150,7 @@ PHP_METHOD(RedisArray, del)
 		array_init(&z_keys);
 		for (i = 0; i < argc; ++i) {
             zval *z_arg = &z_args[i];
-#if (PHP_MAJOR_VERSION < 7)
-			MAKE_STD_ZVAL(z_tmp);
-#else
-            zval zv;
-            z_tmp = &zv;
-#endif
+            PHPREDIS_STD_ZVAL(z_tmp);
             ZVAL_ZVAL(z_tmp, z_arg, 1, 0);
 			/* add copy to z_keys */
 			add_next_index_zval(&z_keys, z_tmp);
@@ -1219,12 +1203,7 @@ PHP_METHOD(RedisArray, del)
 		for(i = 0; i < argc; ++i) {
 			if(pos[i] != n) continue;
 
-#if (PHP_MAJOR_VERSION < 7)
-			MAKE_STD_ZVAL(z_tmp);
-#else
-            zval zv;
-            z_tmp = &zv;
-#endif
+            PHPREDIS_STD_ZVAL(z_tmp);
             ZVAL_ZVAL(z_tmp, argv[i], 1, 0);
 			add_next_index_zval(&z_argarray, z_tmp);
 			found++;

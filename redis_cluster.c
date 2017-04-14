@@ -2091,10 +2091,8 @@ PHP_METHOD(RedisCluster, _masters) {
         host = node->sock->host;
         port = node->sock->port;
 
-        zval z, *z_sub = &z;
-#if (PHP_MAJOR_VERSION < 7)
-        MAKE_STD_ZVAL(z_sub);
-#endif
+        zval *z_sub;
+        PHPREDIS_STD_ZVAL(z_sub);
         array_init(z_sub);
 
         add_next_index_stringl(z_sub, host, strlen(host));

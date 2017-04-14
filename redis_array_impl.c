@@ -593,12 +593,8 @@ ra_index_keys(zval *z_pairs, zval *z_redis TSRMLS_DC) {
 
 	/* Go through input array and add values to the key array */
     ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(z_pairs), idx, zkey, z_val) {
-        zval zv, *z_new = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-        MAKE_STD_ZVAL(z_new);
-#else
-        PHPREDIS_NOTUSED(z_val);
-#endif
+        zval *z_new;
+        PHPREDIS_STD_ZVAL(z_new);
 
         if (zkey) {
             ZVAL_STRINGL(z_new, zkey->val, zkey->len);

@@ -12,6 +12,7 @@
 #if (PHP_MAJOR_VERSION < 7)
 #include <ext/standard/php_smart_str.h>
 
+#define PHPREDIS_STD_ZVAL(zv) MAKE_STD_ZVAL(zv)
 /* This macro simply pases through to zval_ptr_dtor in php5, which will
  * destroy any allocated zval value and efree the zval itself when the
  * refcount reaches 0 */
@@ -385,11 +386,10 @@ typedef int strlen_t;
 #include <ext/standard/php_smart_string.h>
 typedef size_t strlen_t;
 
-/* php7 mostly uses stack allocated zval variables and no longer has the
- * MAKE_STD_ZVAL macro.  This macro creates a stack allocated alias zval
+/* This macro creates a stack allocated alias zval
  * variable and points the requested variable to it. */
-#define MAKE_STD_ZVAL(zv) \
-    zval _##zv##_stack; \
+#define PHPREDIS_STD_ZVAL(zv) \
+    zval _##zv##_stack = {0}; \
     zv = &_##zv##_stack;
 
 /* Companion to the above macro which in php7 that will simply destroy

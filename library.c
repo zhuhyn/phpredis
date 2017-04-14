@@ -969,10 +969,8 @@ PHP_REDIS_API void redis_client_list_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSo
         RETURN_FALSE;
     }
 
-    zval zv, *z_ret = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_ret);
-#endif
+    zval *z_ret;
+    PHPREDIS_STD_ZVAL(z_ret);
 
     /* Parse it out */
     redis_parse_client_list_response(resp, z_ret);
@@ -1218,10 +1216,8 @@ static void array_zip_values_and_scores(RedisSock *redis_sock, zval *z_tab,
         } else if (decode == SCORE_DECODE_DOUBLE) {
             add_assoc_double_ex(z_ret, hkey->val, hkey->len, atof(hval));
         } else {
-            zval zv0, *z = &zv0;
-#if (PHP_MAJOR_VERSION < 7)
-            MAKE_STD_ZVAL(z);
-#endif
+            zval *z;
+            PHPREDIS_STD_ZVAL(z);
             ZVAL_ZVAL(z, z_value_p, 1, 0);
             add_assoc_zval_ex(z_ret, hkey->val, hkey->len, z);
         }
@@ -1255,10 +1251,8 @@ redis_mbulk_reply_zipped(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
         return -1;
     }
     numElems = atoi(inbuf+1);
-    zval zv, *z_multi_result = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_multi_result);
-#endif
+    zval *z_multi_result;
+    PHPREDIS_STD_ZVAL(z_multi_result);
     array_init(z_multi_result); /* pre-allocate array for multi's results. */
 
     /* Grab our key, value, key, value array */
@@ -1402,10 +1396,8 @@ PHP_REDIS_API void redis_debug_response(INTERNAL_FUNCTION_PARAMETERS, RedisSock 
         RETURN_FALSE;
     }
 
-    zval zv, *z_result = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_result);
-#endif
+    zval *z_result;
+    PHPREDIS_STD_ZVAL(z_result);
     array_init(z_result);
 
     /* Skip the '+' */
@@ -1696,10 +1688,8 @@ PHP_REDIS_API int redis_sock_read_multibulk_reply(INTERNAL_FUNCTION_PARAMETERS,
         return -1;
     }
     numElems = atoi(inbuf+1);
-    zval zv, *z_multi_result = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_multi_result);
-#endif
+    zval *z_multi_result;
+    PHPREDIS_STD_ZVAL(z_multi_result);
     array_init(z_multi_result); /* pre-allocate array for multi's results. */
 
     redis_mbulk_reply_loop(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
@@ -1739,10 +1729,8 @@ redis_mbulk_reply_raw(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval 
         return -1;
     }
     numElems = atoi(inbuf+1);
-    zval zv, *z_multi_result = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_multi_result);
-#endif
+    zval *z_multi_result;
+    PHPREDIS_STD_ZVAL(z_multi_result);
     array_init(z_multi_result); /* pre-allocate array for multi's results. */
 
     redis_mbulk_reply_loop(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
@@ -1816,10 +1804,8 @@ PHP_REDIS_API int redis_mbulk_reply_assoc(INTERNAL_FUNCTION_PARAMETERS, RedisSoc
         return -1;
     }
     numElems = atoi(inbuf+1);
-    zval zv, *z_multi_result = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_multi_result);
-#endif
+    zval *z_multi_result;
+    PHPREDIS_STD_ZVAL(z_multi_result);
     array_init(z_multi_result); /* pre-allocate array for multi's results. */
 
     for(i = 0; i < numElems; ++i) {
@@ -2261,10 +2247,8 @@ redis_read_variant_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
         return -1;
     }
 
-    zval zv, *z_ret = &zv;
-#if (PHP_MAJOR_VERSION < 7)
-    MAKE_STD_ZVAL(z_ret);
-#endif
+    zval *z_ret;
+    PHPREDIS_STD_ZVAL(z_ret);
 	/* Switch based on our top level reply type */
 	switch(reply_type) {
 		case TYPE_ERR:
