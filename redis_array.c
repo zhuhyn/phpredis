@@ -927,7 +927,6 @@ PHP_METHOD(RedisArray, mget)
         argv[i++] = data;
     } ZEND_HASH_FOREACH_END();
 
-    MAKE_STD_ZVAL(z_argarray);
     MAKE_STD_ZVAL(z_tmp_array);
     array_init(z_tmp_array);
 
@@ -937,6 +936,7 @@ PHP_METHOD(RedisArray, mget)
         if(!argc_each[n]) continue;
 
         /* copy args for MGET call on node. */
+        MAKE_STD_ZVAL(z_argarray);
         array_init(z_argarray);
 
         for(i = 0; i < argc; ++i) {
@@ -997,7 +997,6 @@ PHP_METHOD(RedisArray, mget)
     }
 
     /* cleanup */
-    PHPREDIS_FREE_ZVAL(z_argarray);
     PHPREDIS_FREE_ZVAL(z_tmp_array);
     efree(argv);
     efree(pos);
@@ -1008,7 +1007,7 @@ PHP_METHOD(RedisArray, mget)
 /* MSET will distribute the call to several nodes and regroup the values. */
 PHP_METHOD(RedisArray, mset)
 {
-    zval *object, *z_keys, z_argarray, *data, z_ret, **argv;
+    zval *object, *z_keys, *z_argarray, *data, *z_ret, **argv, *z_tmp;
     int i = 0, n;
     RedisArray *ra;
     int *pos, argc, *argc_each;
@@ -1072,22 +1071,22 @@ PHP_METHOD(RedisArray, mset)
 
         int found = 0;
 
+        /* Array for calling MSET */
+        MAKE_STD_ZVAL(z_argarray);
+        array_init(z_argarray);
+
         /* copy args */
-        array_init(&z_argarray);
         for(i = 0; i < argc; ++i) {
             if(pos[i] != n) continue;
 
-            zval zv, *z_tmp = &zv;
-#if (PHP_MAJOR_VERSION < 7)
             MAKE_STD_ZVAL(z_tmp);
-#endif
             ZVAL_ZVAL(z_tmp, argv[i], 1, 0);
-            add_assoc_zval_ex(&z_argarray, keys[i], key_lens[i], z_tmp);
+            add_assoc_zval_ex(z_argarray, keys[i], key_lens[i], z_tmp);
             found++;
         }
 
         if(!found) {
-            zval_dtor(&z_argarray);
+            PHPREDIS_FREE_ZVAL(z_argarray);
             continue; /* don't run empty MSETs */
         }
 
@@ -1095,22 +1094,23 @@ PHP_METHOD(RedisArray, mset)
             ra_index_multi(&ra->redis[n], MULTI TSRMLS_CC);
         }
 
-        zval z_fun;
-
-        /* prepare call */
-        ZVAL_STRINGL(&z_fun, "MSET", 4);
+        /* Prepare MSET call */
+        zval z_mset;
+        ZVAL_STRINGL(&z_mset, "MSET", 4);
 
         /* call */
-        call_user_function(&redis_ce->function_table, &ra->redis[n], &z_fun, &z_ret, 1, &z_argarray);
-        zval_dtor(&z_fun);
-        zval_dtor(&z_ret);
+        MAKE_STD_ZVAL(z_ret);
+        call_user_function(&redis_ce->function_table, &ra->redis[n], &z_mset, z_ret, 1, z_argarray);
+        zval_dtor(&z_mset);
+        PHPREDIS_FREE_ZVAL(z_ret);
 
         if(ra->index) {
-            ra_index_keys(&z_argarray, &ra->redis[n] TSRMLS_CC); /* use SADD to add keys to node index */
+            ra_index_keys(z_argarray, &ra->redis[n] TSRMLS_CC); /* use SADD to add keys to node index */
             ra_index_exec(&ra->redis[n], NULL, 0 TSRMLS_CC); /* run EXEC */
         }
 
-        zval_dtor(&z_argarray);
+        /* Free up our MSET args */
+        PHPREDIS_FREE_ZVAL(z_argarray);
     }
 
     /* Free any keys that we needed to allocate memory for, because they weren't strings */
