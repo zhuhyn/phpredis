@@ -24,6 +24,7 @@
 #include "SAPI.h"
 #include "ext/standard/url.h"
 #include "ext/standard/crc32.h"
+#include "zend_interfaces.h"
 
 #define PHPREDIS_INDEX_NAME "__phpredis_array_index__"
 
@@ -970,6 +971,40 @@ ra_move_string(const char *key, int key_len, zval *z_from, zval *z_to, long ttl 
     return 1;
 }
 
+#if (PHP_MAJOR_VERSION < 7)
+
+static zend_bool
+ra_move_hash(const char *key, int key_len, zval *z_from, zval *z_to, long ttl TSRMLS_DC) {
+    zval *z_ret, *z_arg1;
+
+    /* Call HMGET on the source host */
+    MAKE_STD_ZVAL(z_arg1);
+    ZVAL_STRINGL(z_arg1, key, key_len);
+    zend_call_method_with_1_params(&z_from, redis_ce, NULL, "hgetall", &z_ret, z_arg1);
+
+    /* Abort if we don't get a proper response */
+    if (!z_ret || Z_TYPE_P(z_ret) != IS_ARRAY) {
+        if (z_ret) zval_ptr_dtor(&z_ret);
+        zval_ptr_dtor(&z_arg1);
+        return 0;
+    }
+
+    /* Now run HMSET on destination host with the results of our HGETALL call */
+    zend_call_method_with_2_params(&z_to, redis_ce, NULL, "hmset", NULL, z_arg1, z_ret);
+
+    /* Expire key if needed */
+    ra_expire_key(key, key_len, z_to, ttl TSRMLS_CC);
+
+    /* cleanup */
+    zval_ptr_dtor(&z_ret);
+    zval_ptr_dtor(&z_arg1);
+    zval_ptr_dtor(&z_ret);
+
+    return 1;
+}
+
+#else
+
 static zend_bool
 ra_move_hash(const char *key, int key_len, zval *z_from, zval *z_to, long ttl TSRMLS_DC) {
     zval z_fun_hgetall, z_fun_hmset, z_ret_dest, z_args[2];
@@ -1002,6 +1037,8 @@ ra_move_hash(const char *key, int key_len, zval *z_from, zval *z_to, long ttl TS
 
     return 1;
 }
+
+#endif
 
 static zend_bool
 ra_move_collection(const char *key, int key_len, zval *z_from, zval *z_to,
@@ -1139,20 +1176,28 @@ ra_move_key(const char *key, int key_len, zval *z_from, zval *z_to TSRMLS_DC)
 static void zval_rehash_callback(zend_fcall_info *z_cb, zend_fcall_info_cache *z_cb_cache,
                                  const char *hostname, long count, zval *z_ret TSRMLS_DC)
 {
+#if (PHP_MAJOR_VERSION < 7)
+    zval *z_args[2];
 
+    MAKE_STD_ZVAL(z_args[0]);
+    MAKE_STD_ZVAL(z_args[1]);
+    ZVAL_STRINGL(z_args[0], hostname, 0);
+    ZVAL_LONG(z_args[1], count);
+
+    zval **z_args_pp[2] = { &z_args[0], &z_args[1] };
+
+    z_cb->params = z_args_pp;
+    z_cb->retval_ptr_ptr = &z_ret;
+#else
     zval z_args[2];
 
     ZVAL_STRING(&z_args[0], hostname);
     ZVAL_LONG(&z_args[1], count);
 
-#if (PHP_MAJOR_VERSION < 7)
-    zval *z_host = &z_args[0], *z_count = &z_args[1], **z_args_pp[2] = { &z_host, &z_count };
-    z_cb->params = z_args_pp;
-    z_cb->retval_ptr_ptr = &z_ret;
-#else
     z_cb->params = z_args;
     z_cb->retval = z_ret;
 #endif
+
     z_cb->param_count = 2;
     z_cb->no_separation = 0;
 
@@ -1160,9 +1205,12 @@ static void zval_rehash_callback(zend_fcall_info *z_cb, zend_fcall_info_cache *z
     zend_call_function(z_cb, z_cb_cache TSRMLS_CC);
 
     /* cleanup */
-    zval_dtor(&z_args[0]);
 #if (PHP_MAJOR_VERSION < 7)
+    zval_ptr_dtor(&z_args[0]);
+    zval_ptr_dtor(&z_args[1]);
     zval_ptr_dtor(&z_ret);
+#else
+    zval_dtor(&z_args[0]);
 #endif
 }
 
