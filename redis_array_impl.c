@@ -998,7 +998,6 @@ ra_move_hash(const char *key, int key_len, zval *z_from, zval *z_to, long ttl TS
     /* cleanup */
     zval_ptr_dtor(&z_ret);
     zval_ptr_dtor(&z_arg1);
-    zval_ptr_dtor(&z_ret);
 
     return 1;
 }
