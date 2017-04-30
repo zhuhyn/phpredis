@@ -699,8 +699,12 @@ int redis_zinter_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
 
         // Process our weights
         ZEND_HASH_FOREACH_VAL(ht_weights, z_ele) {
-            // Ignore non numeric args unless they're inf/-inf
+#if (PHP_MAJOR_VERSION >= 7)
+            /* Operate on the value itself */
+            if (Z_ISREF_P(z_ele)) ZVAL_DEREF(z_ele);
+#endif
 
+            // Ignore non numeric args unless they're inf/-inf
             switch (Z_TYPE_P(z_ele)) {
                 case IS_LONG:
                     redis_cmd_append_sstr_long(&cmdstr, Z_LVAL_P(z_ele));
