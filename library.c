@@ -1405,6 +1405,7 @@ redis_sock_create(char *host, int host_len, unsigned short port,
 
     redis_sock->readonly = 0;
     redis_sock->tcp_keepalive = 0;
+    redis_sock->reply_literal = 0;
 
     return redis_sock;
 }
@@ -2125,12 +2126,16 @@ redis_read_variant_line(RedisSock *redis_sock, REDIS_REPLY_TYPE reply_type,
         /* Handle throwable errors */
         redis_error_throw(redis_sock TSRMLS_CC);
 
-        /* Set our response to FALSE */
-        ZVAL_FALSE(z_ret);
-    } else {
-        /* Set our response to TRUE */
-        ZVAL_TRUE(z_ret);
-    }
+		/* Set our response to FALSE */
+		ZVAL_FALSE(z_ret);
+	} else {
+		if (!redis_sock->reply_literal) {
+		    /* Set our response to TRUE */
+		    ZVAL_TRUE(z_ret);
+		} else {
+		    ZVAL_STRINGL(z_ret, inbuf, line_size);
+		}
+	}
 
     return 0;
 }
