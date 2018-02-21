@@ -947,7 +947,7 @@ PHP_REDIS_API int cluster_map_keyspace(redisCluster *c TSRMLS_DC) {
                 memset(c->master, 0, sizeof(redisClusterNode*)*REDIS_CLUSTER_SLOTS);
             }
         }
-        redis_sock_disconnect(seed TSRMLS_CC);
+        redis_sock_disconnect(seed, 0 TSRMLS_CC);
         if (mapped) break;
     } ZEND_HASH_FOREACH_END();
 
@@ -1070,9 +1070,20 @@ PHP_REDIS_API void cluster_disconnect(redisCluster *c TSRMLS_DC) {
 
     ZEND_HASH_FOREACH_PTR(c->nodes, node) {
         if (node == NULL) break;
-        redis_sock_disconnect(node->sock TSRMLS_CC);
+        redis_sock_disconnect(node->sock, 0 TSRMLS_CC);
         node->sock->lazy_connect = 1;
     } ZEND_HASH_FOREACH_END();
+}
+
+/* Reset a slot to disconnected and lazy connect status */
+static void cluster_reset_cmd_slot(redisCluster *c TSRMLS_DC) {
+    redisClusterNode *node;
+
+    /* Make sure we have a slot */
+    if ((node = SLOT(c, c->cmd_slot)) != NULL) {
+        redis_sock_disconnect(node->sock, 1 TSRMLS_CC);
+        node->sock->lazy_connect = 1;
+    }
 }
 
 /* This method attempts to write our command at random to the master and any
@@ -1439,6 +1450,7 @@ PHP_REDIS_API short cluster_send_command(redisCluster *c, short slot, const char
             "The Redis Cluster is down (CLUSTERDOWN)", 0 TSRMLS_CC);
         return -1;
     } else if (timedout) {
+        cluster_reset_cmd_slot(c TSRMLS_CC);
         zend_throw_exception(redis_cluster_exception_ce,
             "Timed out attempting to find data in the correct node!", 0 TSRMLS_CC);
     }

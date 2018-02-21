@@ -1427,7 +1427,7 @@ PHP_REDIS_API int redis_sock_connect(RedisSock *redis_sock TSRMLS_DC)
 #endif
 
     if (redis_sock->stream != NULL) {
-        redis_sock_disconnect(redis_sock TSRMLS_CC);
+        redis_sock_disconnect(redis_sock, 0 TSRMLS_CC);
     }
 
     tv.tv_sec  = (time_t)redis_sock->timeout;
@@ -1532,7 +1532,7 @@ redis_sock_server_open(RedisSock *redis_sock TSRMLS_DC)
 /**
  * redis_sock_disconnect
  */
-PHP_REDIS_API int redis_sock_disconnect(RedisSock *redis_sock TSRMLS_DC)
+PHP_REDIS_API int redis_sock_disconnect(RedisSock *redis_sock, int force TSRMLS_DC)
 {
     if (redis_sock == NULL) {
         return 1;
@@ -1546,6 +1546,8 @@ PHP_REDIS_API int redis_sock_disconnect(RedisSock *redis_sock TSRMLS_DC)
         /* Stil valid? */
         if (!redis_sock->persistent) {
             php_stream_close(redis_sock->stream);
+        } else if (force) {
+            php_stream_pclose(redis_sock->stream);
         }
 
         redis_sock->stream = NULL;
