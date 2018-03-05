@@ -2126,16 +2126,16 @@ redis_read_variant_line(RedisSock *redis_sock, REDIS_REPLY_TYPE reply_type,
         /* Handle throwable errors */
         redis_error_throw(redis_sock TSRMLS_CC);
 
-		/* Set our response to FALSE */
-		ZVAL_FALSE(z_ret);
-	} else {
-		if (!redis_sock->reply_literal) {
-		    /* Set our response to TRUE */
-		    ZVAL_TRUE(z_ret);
-		} else {
-		    ZVAL_STRINGL(z_ret, inbuf, line_size);
-		}
-	}
+        /* Set our response to FALSE */
+        ZVAL_FALSE(z_ret);
+    } else {
+        if (!redis_sock->reply_literal) {
+            /* Set our response to TRUE */
+            ZVAL_TRUE(z_ret);
+        } else {
+            ZVAL_STRINGL(z_ret, inbuf, line_size);
+        }
+    }
 
     return 0;
 }
