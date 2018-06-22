@@ -1289,6 +1289,10 @@ redis_read_bzpop_payload(RedisSock *redis_sock, zval *z_return TSRMLS_DC) {
 
     add_next_index_stringl(z_return, key, keylen);
     if (redis_unpack(redis_sock, mem, memlen, z TSRMLS_CC)) {
+#if (PHP_MAJOR_VERSION < 7)
+        MAKE_STD_ZVAL(z);
+        *z = zv;
+#endif
         add_next_index_zval(z_return, z);
     } else {
         add_next_index_stringl(z_return, mem, memlen);
@@ -1517,7 +1521,7 @@ PHP_REDIS_API int
 redis_mbulk_bzpop_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab,
                         void *ctx)
 {
-    zval z, *z_return = &z;
+    zval z, *z_ret = &z;
     int count;
 
     /* Make sure we can read the header */
@@ -1527,25 +1531,25 @@ redis_mbulk_bzpop_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zva
         goto failure;
     }
 
-    REDIS_MAKE_STD_ZVAL(z_return);
-    array_init(z_return);
+    REDIS_MAKE_STD_ZVAL(z_ret);
+    array_init(z_ret);
 
     /* We only need to read payload if the reply wasn't empty */
-    if (count == 3 && redis_read_bzpop_payload(redis_sock, z_return TSRMLS_CC) < 0)
+    if (count == 3 && redis_read_bzpop_payload(redis_sock, z_ret TSRMLS_CC) < 0)
         goto cleanup;
 
 
     /* Success */
     if (IS_ATOMIC(redis_sock)) {
-        RETVAL_ZVAL(z_return, 0, 1);
+        RETVAL_ZVAL(z_ret, 0, 1);
     } else {
-        add_next_index_zval(z_tab, z_return);
+        add_next_index_zval(z_tab, z_ret);
     }
     return 0;
 
 cleanup:
-    zval_dtor(z_return);
-    REDIS_FREE_ZVAL(z_return);
+    zval_dtor(z_ret);
+    REDIS_FREE_ZVAL(z_ret);
 failure:
     if (IS_ATOMIC(redis_sock)) {
         RETVAL_FALSE;

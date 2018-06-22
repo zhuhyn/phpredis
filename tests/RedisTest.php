@@ -2064,6 +2064,8 @@ class Redis_Test extends TestSuite
                 $this->doZPopTest($serializer, $max);
             }
         }
+
+        $this->redis->setOption(Redis::OPT_SERIALIZER, Redis::SERIALIZER_NONE);
     }
 
     public function doBZPopTest($serializer, $max) {
