@@ -61,6 +61,8 @@ PHP_REDIS_API int redis_mbulk_reply_zipped_keys_int(INTERNAL_FUNCTION_PARAMETERS
 PHP_REDIS_API int redis_mbulk_reply_zipped_keys_dbl(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab, void *ctx);
 PHP_REDIS_API int redis_mbulk_reply_assoc(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab, void *ctx);
 
+PHP_REDIS_API int redis_mbulk_bzpop_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab, void *ctx);
+
 PHP_REDIS_API int redis_sock_read_scan_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, REDIS_SCAN_TYPE type, zend_long *iter);
 
 
@@ -70,6 +72,7 @@ PHP_REDIS_API int redis_xread_reply(INTERNAL_FUNCTION_PARAMETERS,
     RedisSock *redis_sock, zval *z_tab, void *ctx);
 PHP_REDIS_API int redis_xclaim_reply(INTERNAL_FUNCTION_PARAMETERS,
     RedisSock *redis_sock, zval *z_tab, void *ctx);
+
 
 PHP_REDIS_API int redis_subscribe_response(INTERNAL_FUNCTION_PARAMETERS,
     RedisSock *redis_sock, zval *z_tab, void *ctx);
@@ -94,12 +97,10 @@ redis_unserialize(RedisSock *redis_sock, const char *val, int val_len, zval *z_r
 PHP_REDIS_API int redis_pack(RedisSock *redis_sock, zval *z, char **val, strlen_t *val_len TSRMLS_DC);
 PHP_REDIS_API int redis_unpack(RedisSock *redis_sock, const char *val, int val_len, zval *z_ret TSRMLS_DC);
 
-PHP_REDIS_API int
-redis_read_stream_messages(RedisSock *redis_sock, int count, zval *z_ret TSRMLS_DC);
-PHP_REDIS_API int
-redis_read_stream_messages_multi(RedisSock *redis_sock, int count, zval *z_ret TSRMLS_DC);
-PHP_REDIS_API int
-redis_read_xclaim_response(RedisSock *redis_sock, int count, zval *rv TSRMLS_DC);
+PHP_REDIS_API int redis_read_stream_messages(RedisSock *redis_sock, int count, zval *z_ret TSRMLS_DC);
+PHP_REDIS_API int redis_read_stream_messages_multi(RedisSock *redis_sock, int count, zval *z_ret TSRMLS_DC);
+PHP_REDIS_API int redis_read_xclaim_response(RedisSock *redis_sock, int count, zval *rv TSRMLS_DC);
+PHP_REDIS_API int redis_read_bzpop_payload(RedisSock *redis_sock, zval *z_return TSRMLS_DC);
 
 /*
 * Variant Read methods, mostly to implement eval

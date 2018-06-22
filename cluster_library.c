@@ -227,8 +227,8 @@ cluster_read_sock_resp(RedisSock *redis_sock, REDIS_REPLY_TYPE type,
             }
             break;
         case TYPE_MULTIBULK:
-            r->elements = len;
             if (len != (size_t)-1) {
+                r->elements = len;
                 r->element = ecalloc(len, sizeof(clusterReply*)*len);
                 cluster_multibulk_resp_recursive(redis_sock, len, r->element,
                     &err TSRMLS_CC);
@@ -2375,6 +2375,14 @@ cluster_mbulk_assoc_resp(INTERNAL_FUNCTION_PARAMETERS, redisCluster *c,
         mbulk_resp_loop_assoc, ctx);
 }
 
+/* BZPOP */
+PHP_REDIS_API void
+cluster_mbulk_bzpop_resp(INTERNAL_FUNCTION_PARAMETERS, redisCluster *c,
+                         void *ctx)
+{
+    cluster_gen_mbulk_resp(INTERNAL_FUNCTION_PARAM_PASSTHRU, c, mbulk_resp_loop_bzpop, ctx);
+}
+
 /*
  * Various MULTI BULK reply callback functions
  */
@@ -2516,6 +2524,17 @@ int mbulk_resp_loop_zipdbl(RedisSock *redis_sock, zval *z_result,
     }
 
     return SUCCESS;
+}
+
+/* Specialized handler for BZPOP variants. */
+int mbulk_resp_loop_bzpop(RedisSock *redis_sock, zval *z_result, long long count,
+                          void *ctx TSRMLS_DC)
+{
+    /* Count should be 3.  We won't get here if it was empty */
+    if (count != 3 || redis_read_bzpop_payload(redis_sock, z_result TSRMLS_CC) < 0)
+        return -1;
+
+    return 0;
 }
 
 /* MULTI BULK where we're passed the keys, and we attach vals */

@@ -252,6 +252,8 @@ static zend_function_entry redis_functions[] = {
      PHP_ME(Redis, blPop, arginfo_blrpop, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, brPop, arginfo_blrpop, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, brpoplpush, arginfo_brpoplpush, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, bzpopmax, NULL, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, bzpopmin, NULL, ZEND_ACC_PUBLIC) 
      PHP_ME(Redis, clearLastError, arginfo_void, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, client, arginfo_client, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, close, arginfo_void, ZEND_ACC_PUBLIC)
@@ -424,6 +426,8 @@ static zend_function_entry redis_functions[] = {
      PHP_ME(Redis, zIncrBy, arginfo_zincrby, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, zInter, arginfo_zstore, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, zLexCount, arginfo_key_min_max, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, zpopmax, NULL, ZEND_ACC_PUBLIC)
+     PHP_ME(Redis, zpopmin, NULL, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, zRange, arginfo_zrange, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, zRangeByLex, arginfo_zrangebylex, ZEND_ACC_PUBLIC)
      PHP_ME(Redis, zRangeByScore, arginfo_zrangebyscore, ZEND_ACC_PUBLIC)
@@ -1959,6 +1963,22 @@ PHP_METHOD(Redis, zAdd) {
     REDIS_PROCESS_CMD(zadd, redis_long_response);
 }
 /* }}} */
+
+PHP_METHOD(Redis, bzpopmax) {
+    REDIS_PROCESS_KW_CMD("BZPOPMAX", redis_bzpop_cmd, redis_mbulk_bzpop_reply);
+}
+
+PHP_METHOD(Redis, bzpopmin) {
+    REDIS_PROCESS_KW_CMD("BZPOPMIN", redis_bzpop_cmd, redis_mbulk_bzpop_reply);
+}
+
+PHP_METHOD(Redis, zpopmax) {
+    REDIS_PROCESS_KW_CMD("ZPOPMAX", redis_zpop_cmd, redis_mbulk_reply_zipped_keys_dbl);
+}
+
+PHP_METHOD(Redis, zpopmin) {
+    REDIS_PROCESS_KW_CMD("ZPOPMIN", redis_zpop_cmd, redis_mbulk_reply_zipped_keys_dbl);
+}
 
 /* Handle ZRANGE and ZREVRANGE as they're the same except for keyword */
 static void generic_zrange_cmd(INTERNAL_FUNCTION_PARAMETERS, char *kw,

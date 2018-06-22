@@ -1269,6 +1269,39 @@ redis_sock_read_single_line(RedisSock *redis_sock, char *buffer, size_t buflen,
     return type == TYPE_LINE ? 0 : -1;
 }
 
+/* Consume interior BZPOP[MIN|MAX] payload (can be used by Redis and RedisCluster) */
+PHP_REDIS_API int
+redis_read_bzpop_payload(RedisSock *redis_sock, zval *z_return TSRMLS_DC) {
+    zval zv, *z = &zv;
+    char *key = NULL, *mem = NULL, *dbl = NULL;
+    int keylen, memlen, dbllen;
+
+    /* We now need to be able to read three bulk responses (key, member, score) */
+    if ((key = redis_sock_read(redis_sock, &keylen TSRMLS_CC)) == NULL ||
+        (mem = redis_sock_read(redis_sock, &memlen TSRMLS_CC)) == NULL ||
+        (dbl = redis_sock_read(redis_sock, &dbllen TSRMLS_CC)) == NULL)
+    {
+        if (key) efree(key);
+        if (mem) efree(mem);
+        if (dbl) efree(dbl);
+        return -1;
+    }
+
+    add_next_index_stringl(z_return, key, keylen);
+    if (redis_unpack(redis_sock, mem, memlen, z TSRMLS_CC)) {
+        add_next_index_zval(z_return, z);
+    } else {
+        add_next_index_stringl(z_return, mem, memlen);
+    }
+    add_next_index_double(z_return, atof(dbl));
+
+    efree(key);
+    efree(mem);
+    efree(dbl);
+
+    return 0;
+}
+
 /* Helper function to consume Redis stream message data.  This is useful for
  * multiple stream callers (e.g. XREAD[GROUP], and X[REV]RANGE handlers). */
 PHP_REDIS_API int
@@ -1470,6 +1503,49 @@ redis_xclaim_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
     }
     return 0;
 
+failure:
+    if (IS_ATOMIC(redis_sock)) {
+        RETVAL_FALSE;
+    } else {
+        add_next_index_bool(z_tab, 0);
+    }
+    return -1;
+}
+
+/* BZPOP[MIN|MAX] */
+PHP_REDIS_API int
+redis_mbulk_bzpop_reply(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock, zval *z_tab,
+                        void *ctx)
+{
+    zval z, *z_return = &z;
+    int count;
+
+    /* Make sure we can read the header */
+    if ((read_mbulk_header(redis_sock, &count TSRMLS_CC)) < 0 ||
+        (count != 3 && count != -1))
+    {
+        goto failure;
+    }
+
+    REDIS_MAKE_STD_ZVAL(z_return);
+    array_init(z_return);
+
+    /* We only need to read payload if the reply wasn't empty */
+    if (count == 3 && redis_read_bzpop_payload(redis_sock, z_return TSRMLS_CC) < 0)
+        goto cleanup;
+
+
+    /* Success */
+    if (IS_ATOMIC(redis_sock)) {
+        RETVAL_ZVAL(z_return, 0, 1);
+    } else {
+        add_next_index_zval(z_tab, z_return);
+    }
+    return 0;
+
+cleanup:
+    zval_dtor(z_return);
+    REDIS_FREE_ZVAL(z_return);
 failure:
     if (IS_ATOMIC(redis_sock)) {
         RETVAL_FALSE;

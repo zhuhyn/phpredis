@@ -2027,6 +2027,92 @@ class Redis_Test extends TestSuite
         $this->assertTrue(array() === $this->redis->lrange('{list}y', 0, -1));
     }
 
+    protected function addZsetEntries($keys, $vals) {
+        if (!is_array($keys)) $keys = Array($keys);
+        foreach ($keys as $key) {
+            $this->redis->del($key);
+            foreach ($vals as $mem => $score) {
+                $this->redis->zAdd($key, $score, $mem);
+            }
+        }
+    }
+
+    public function doZPopTest($serializer, $max) {
+        $this->redis->setOption(Redis::OPT_SERIALIZER, $serializer);
+
+        $values = Array('a' => 1.0, 'b' => 2.0, 'c' => 3.0, 'd' => 4.0);
+
+        for ($c = 0; $c <= count($values); $c++) {
+            $this->addZsetEntries('zpop', $values);
+
+            $vdup = $max ? array_reverse($values) : $values;
+            $pcmd = $max ? 'zPopMax' : 'zPopMin';
+
+            $entry = $this->redis->$pcmd('zpop', $c);
+            $test = $c > 0 ? array_slice($vdup, 0, $c) : $vdup;
+
+            $this->assertEquals($entry, $test);
+        }
+    }
+
+    public function testZPopMinMax() {
+        if (!$this->minVersionCheck("5.0"))
+            return $this->markTestSkipped();
+
+        foreach ($this->serializers as $serializer) {
+            foreach (Array(false, true) as $max) {
+                $this->doZPopTest($serializer, $max);
+            }
+        }
+    }
+
+    public function doBZPopTest($serializer, $max) {
+        $this->redis->setOption(Redis::OPT_SERIALIZER, $serializer);
+
+        $keys = Array('{z}1', '{z}2');
+        $values = Array('a' => 1.0, 'b' => 2.0, 'c' => 3.0, 'd' => 4.0);
+
+        foreach (Array($keys, array_reverse($keys)) as $popkeys) {
+            $this->addZsetEntries($keys, $values);
+
+            $vdup = $max ? array_reverse($values) : $values;
+            $pcmd = $max ? 'bzPopMax' : 'bzPopMin';
+
+            /* Fold data into what we're expecting */
+            $expect = Array();
+            foreach ($popkeys as $popkey) {
+                foreach ($vdup as $mem => $score) {
+                    $expect[] = Array($popkey, $mem, $score);
+                }
+            }
+
+            do {
+                $zpop = $this->redis->$pcmd($popkeys, 0);
+                $zloc = array_shift($expect);
+                $this->assertEquals($zpop, $zloc);
+            } while ($expect);
+        }
+    }
+
+    public function testBZPopMinMax() {
+        if (!$this->minVersionCheck("5.0"))
+            return $this->markTestSkipped();
+
+        foreach ($this->serializers as $serializer) {
+            foreach (Array(false, true) as $max) {
+                $this->doBZPopTest($serializer, $max);
+            }
+        }
+
+        $this->redis->setOption(Redis::OPT_SERIALIZER, Redis::SERIALIZER_NONE);
+
+        /* Finally make sure we're properly passing blocking time */
+        $t1 = $this->mstime();
+        $this->redis->bzPopMin(Array('{bzp}-notakey1','{bzp}-notakey2'), 1);
+        $t2 = $this->mstime();
+        $this->assertTrue($t2 - $t1 >= 1000);
+    }
+
     public function testZAddFirstArg() {
 
         $this->redis->del('key');

@@ -122,6 +122,8 @@ zend_function_entry redis_cluster_functions[] = {
     PHP_ME(RedisCluster, blpop, arginfo_blrpop, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, brpop, arginfo_blrpop, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, brpoplpush, arginfo_brpoplpush, ZEND_ACC_PUBLIC)
+    PHP_ME(RedisCluster, bzpopmax, NULL, ZEND_ACC_PUBLIC)
+    PHP_ME(RedisCluster, bzpopmin, NULL, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, clearlasterror, arginfo_void, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, client, arginfo_key_or_address_variadic, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, close, arginfo_void, ZEND_ACC_PUBLIC)
@@ -271,6 +273,8 @@ zend_function_entry redis_cluster_functions[] = {
     PHP_ME(RedisCluster, zincrby, arginfo_zincrby, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, zinterstore, arginfo_zstore, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, zlexcount, arginfo_key_min_max, ZEND_ACC_PUBLIC)
+    PHP_ME(RedisCluster, zpopmax, NULL, ZEND_ACC_PUBLIC)
+    PHP_ME(RedisCluster, zpopmin, NULL, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, zrange, arginfo_zrange, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, zrangebylex, arginfo_zrangebylex, ZEND_ACC_PUBLIC)
     PHP_ME(RedisCluster, zrangebyscore, arginfo_zrangebyscore, ZEND_ACC_PUBLIC)
@@ -1822,6 +1826,22 @@ PHP_METHOD(RedisCluster, zremrangebylex) {
         cluster_long_resp, 0);
 }
 /* }}} */
+
+PHP_METHOD(RedisCluster, zpopmax) {
+    CLUSTER_PROCESS_KW_CMD("ZPOPMAX", redis_zpop_cmd, cluster_mbulk_zipdbl_resp, 0);
+}
+
+PHP_METHOD(RedisCluster, zpopmin) {
+    CLUSTER_PROCESS_KW_CMD("ZPOPMIN", redis_zpop_cmd, cluster_mbulk_zipdbl_resp, 0);
+}
+
+PHP_METHOD(RedisCluster, bzpopmax) {
+    CLUSTER_PROCESS_KW_CMD("BZPOPMAX", redis_bzpop_cmd, cluster_mbulk_bzpop_resp, 0);
+}
+
+PHP_METHOD(RedisCluster, bzpopmin) {
+    CLUSTER_PROCESS_KW_CMD("BZPOPMIN", redis_bzpop_cmd, cluster_mbulk_bzpop_resp, 0);
+}
 
 /* {{{ proto RedisCluster::sort(string key, array options) */
 PHP_METHOD(RedisCluster, sort) {

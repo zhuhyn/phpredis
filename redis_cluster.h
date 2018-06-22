@@ -257,6 +257,12 @@ PHP_METHOD(RedisCluster, geodist);
 PHP_METHOD(RedisCluster, georadius);
 PHP_METHOD(RedisCluster, georadiusbymember);
 
+/* Redis 5.0 [B]ZPOP[MIN|MAX] commands */
+PHP_METHOD(RedisCluster, bzpopmax);
+PHP_METHOD(RedisCluster, bzpopmin);
+PHP_METHOD(RedisCluster, zpopmax);
+PHP_METHOD(RedisCluster, zpopmin);
+
 /* SCAN and friends */
 PHP_METHOD(RedisCluster, scan);
 PHP_METHOD(RedisCluster, zscan);

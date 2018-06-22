@@ -430,6 +430,8 @@ PHP_REDIS_API void cluster_multi_mbulk_resp(INTERNAL_FUNCTION_PARAMETERS,
     redisCluster *c, void *ctx);
 PHP_REDIS_API zval *cluster_zval_mbulk_resp(INTERNAL_FUNCTION_PARAMETERS,
     redisCluster *c, int pull, mbulk_cb cb, zval *z_ret);
+PHP_REDIS_API void cluster_mbulk_bzpop_resp(INTERNAL_FUNCTION_PARAMETERS, 
+    redisCluster *c, void *ctx);
 
 /* Handlers for things like DEL/MGET/MSET/MSETNX */
 PHP_REDIS_API void cluster_del_resp(INTERNAL_FUNCTION_PARAMETERS,
@@ -461,6 +463,10 @@ PHP_REDIS_API void cluster_xrange_resp(INTERNAL_FUNCTION_PARAMETERS,
 PHP_REDIS_API void cluster_xclaim_resp(INTERNAL_FUNCTION_PARAMETERS,
     redisCluster *c, void *ctx);
 
+/* BZPOP[MIN|MAX] */
+PHP_REDIS_API void cluster_bzpop_resp(INTERNAL_FUNCTION_PARAMETERS,
+    redisCluster *c, void *ctx);
+
 /* MULTI BULK processing callbacks */
 int mbulk_resp_loop(RedisSock *redis_sock, zval *z_result,
     long long count, void *ctx TSRMLS_DC);
@@ -471,6 +477,8 @@ int mbulk_resp_loop_zipstr(RedisSock *redis_sock, zval *z_result,
 int mbulk_resp_loop_zipdbl(RedisSock *redis_sock, zval *z_result,
     long long count, void *ctx TSRMLS_DC);
 int mbulk_resp_loop_assoc(RedisSock *redis_sock, zval *z_result,
+    long long count, void *ctx TSRMLS_DC);
+int mbulk_resp_loop_bzpop(RedisSock *redis_sock, zval *z_result,
     long long count, void *ctx TSRMLS_DC);
 
 #endif

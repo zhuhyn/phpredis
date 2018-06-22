@@ -1252,6 +1252,42 @@ static int gen_varkey_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
  * have specific processing (argument validation, etc) that make them unique
  */
 
+int redis_zpop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char *kw, char **cmd, int *cmd_len, short *slot,
+                   void **ctx)
+{
+    char *key;
+    strlen_t keylen;
+    zend_long lval;
+
+    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|l", &key, &keylen,
+                              &lval) == FAILURE)
+    {
+        return FAILURE;
+    }
+
+    if (ZEND_NUM_ARGS() > 1) {
+        if (lval < 0) {
+            php_error_docref(NULL TSRMLS_CC, E_WARNING, "Count must be >= 0!");
+            return FAILURE;
+        }
+
+        *cmd_len = REDIS_CMD_SPPRINTF(cmd, kw, "kl", key, keylen, lval);
+    } else {
+        *cmd_len = REDIS_CMD_SPPRINTF(cmd, kw, "k", key, keylen);
+    }
+
+    return SUCCESS;
+}
+
+int redis_bzpop_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
+                   char *kw, char **cmd, int *cmd_len, short *slot,
+                   void **ctx)
+{
+    return gen_varkey_cmd(INTERNAL_FUNCTION_PARAM_PASSTHRU, redis_sock,
+        kw, strlen(kw), 2, 1, cmd, cmd_len, slot);
+}
+
 /* SET */
 int redis_set_cmd(INTERNAL_FUNCTION_PARAMETERS, RedisSock *redis_sock,
                   char **cmd, int *cmd_len, short *slot, void **ctx)
