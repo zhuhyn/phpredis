@@ -948,7 +948,7 @@ PHP_REDIS_API int cluster_map_keyspace(redisCluster *c TSRMLS_DC) {
     // Iterate over seeds until we can get slots
     ZEND_HASH_FOREACH_PTR(c->seeds, seed) {
         // Attempt to connect to this seed node
-        if (seed == NULL || redis_sock_connect(seed TSRMLS_CC) != 0) {
+        if (seed == NULL || redis_sock_connect(seed TSRMLS_CC) < 0) {
             continue;
         }
 

@@ -200,7 +200,11 @@ redis_check_eof(RedisSock *redis_sock, int no_throw TSRMLS_DC)
                 usleep(retry_interval);
             }
             /* reconnect */
-            if (redis_sock_connect(redis_sock TSRMLS_CC) == 0) {
+            int result = redis_sock_connect(redis_sock TSRMLS_CC);
+            if (result > 0) {
+                /* reuse persistent connection */
+                return 0;
+            } else if (result == 0) {
                 /* check for EOF again. */
                 errno = 0;
                 if (php_stream_eof(redis_sock->stream) == 0) {
@@ -1791,6 +1795,19 @@ PHP_REDIS_API int redis_sock_connect(RedisSock *redis_sock TSRMLS_DC)
             spprintf(&persistent_id, 0, "phpredis:%s:%f", host,
                 redis_sock->timeout);
         }
+#if (PHP_MAJOR_VERSION < 7)
+        if (php_stream_from_persistent_id(persistent_id, &redis_sock->stream TSRMLS_CC) == PHP_STREAM_PERSISTENT_SUCCESS) {
+#else
+        if (php_stream_from_persistent_id(persistent_id, &redis_sock->stream) == PHP_STREAM_PERSISTENT_SUCCESS) {
+#endif
+            /* Check socket liveness using 0 second timeout */
+            if (php_stream_set_option(redis_sock->stream, PHP_STREAM_OPTION_CHECK_LIVENESS, 0, NULL) == PHP_STREAM_OPTION_RETURN_OK) {
+                redis_sock->status = REDIS_SOCK_STATUS_CONNECTED;
+                efree(persistent_id);
+                return 1;
+            }
+            php_stream_pclose(redis_sock->stream);
+        }
     }
 
     redis_sock->stream = php_stream_xport_create(host, host_len,
@@ -1847,7 +1864,7 @@ redis_sock_server_open(RedisSock *redis_sock TSRMLS_DC)
 
     switch (redis_sock->status) {
         case REDIS_SOCK_STATUS_DISCONNECTED:
-            return redis_sock_connect(redis_sock TSRMLS_CC);
+            return redis_sock_connect(redis_sock TSRMLS_CC) < 0 ? -1 : 0;
         case REDIS_SOCK_STATUS_CONNECTED:
             res = 0;
         break;
