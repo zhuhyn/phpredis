@@ -5,6 +5,9 @@ class TestSuite {
     /* Host the tests will use */
     private $str_host;
 
+    /* Password */
+    private $str_auth = NULL;
+
     private static $_boo_colorize = false;
 
     private static $BOLD_ON = "\033[1m";
@@ -21,11 +24,13 @@ class TestSuite {
     public static $errors = array();
     public static $warnings = array();
 
-    public function __construct($str_host) {
+    public function __construct($str_host, $str_auth) {
         $this->str_host = $str_host;
+        $this->str_auth = $str_auth;
     }
 
     public function getHost() { return $this->str_host; }
+    public function getAuth() { return $this->str_auth; }
 
     /**
      * Returns the fully qualified host path,
@@ -35,9 +40,19 @@ class TestSuite {
      */
     protected function getFullHostPath()
     {
-        return $this->str_host
-            ? 'tcp://' . $this->str_host . ':6379'
-            : null;
+        if ($this->str_host) {
+            $str_path= 'tcp://' . $this->str_host . ':6379';
+            if (($str_auth = $this->getAuth()) != NULL) {
+                $str_path .= "?auth=$str_auth";
+            }
+
+            return $str_path;
+        }
+
+        return NULL;
+        //return $this->str_host
+        //    ? 'tcp://' . $this->str_host . ':6379'
+        //    : null;
     }
 
     public static function make_bold($str_msg) {
@@ -148,7 +163,7 @@ class TestSuite {
             posix_isatty(STDOUT);
     }
 
-    public static function run($className, $str_limit = NULL, $str_host = NULL) {
+    public static function run($className, $str_limit = NULL, $str_host = NULL, $str_auth = NULL) {
         /* Lowercase our limit arg if we're passed one */
         $str_limit = $str_limit ? strtolower($str_limit) : $str_limit;
 
@@ -172,7 +187,7 @@ class TestSuite {
             echo self::make_bold($str_out_name);
 
             $count = count($className::$errors);
-            $rt = new $className($str_host);
+            $rt = new $className($str_host, $str_auth);
 
             try {
                 $rt->setUp();

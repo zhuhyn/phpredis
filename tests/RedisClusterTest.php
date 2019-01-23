@@ -62,7 +62,7 @@ class Redis_Cluster_Test extends Redis_Test {
     public function testSession_lockWaitTime() { return $this->markTestSkipped(); }
 
     /* Load our seeds on construction */
-    public function __construct() {
+    public function __construct($str_host, $str_auth) {
         $str_nodemap_file = dirname($_SERVER['PHP_SELF']) . '/nodes/nodemap';
 
         if (!file_exists($str_nodemap_file)) {
@@ -76,6 +76,8 @@ class Redis_Cluster_Test extends Redis_Test {
                 explode("\n", file_get_contents($str_nodemap_file)
             ));
         }
+
+        parent::__construct($str_host, $str_auth);
     }
 
     /* Override setUp to get info from a specific node */
@@ -87,7 +89,7 @@ class Redis_Cluster_Test extends Redis_Test {
 
     /* Override newInstance as we want a RedisCluster object */
     protected function newInstance() {
-        return new RedisCluster(NULL, self::$_arr_node_map);
+        return new RedisCluster(NULL, self::$_arr_node_map, 0, 0, 0, $this->getAuth());
     }
 
     /* Overrides for RedisTest where the function signature is different.  This
@@ -613,7 +615,7 @@ class Redis_Cluster_Test extends Redis_Test {
     {
         @ini_set('session.save_handler', 'rediscluster');
         @ini_set('session.save_path', implode('&', array_map(function ($seed) {
-            return 'seed[]=' . $seed;
+            return 'seed[]=' . $seed . "&auth=" . $this->getAuth();
         }, self::$_arr_node_map)) . '&failover=error');
         if (!@session_start()) {
             return $this->markTestSkipped();
@@ -628,7 +630,9 @@ class Redis_Cluster_Test extends Redis_Test {
     protected function getFullHostPath()
     {
         $hosts = array_map(function ($host) {
-            return 'seed[]=' . $host . '';
+            return ($str_auth = $this->getAuth())
+                ? "seed[]=$host&auth=$str_auth"
+                : "seed[]=$host";
         }, self::$_arr_node_map);
 
         return implode('&', $hosts);

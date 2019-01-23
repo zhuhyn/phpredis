@@ -10,7 +10,7 @@ error_reporting(E_ALL);
 ini_set( 'display_errors','1');
 
 /* Grab options */
-$arr_args = getopt('', Array('host:', 'class:', 'test:', 'nocolors'));
+$arr_args = getopt('', Array('host:', 'class:', 'test:', 'nocolors', 'auth:'));
 
 /* Grab the test the user is trying to run */
 $arr_valid_classes = Array('redis', 'redisarray', 'rediscluster');
@@ -22,6 +22,9 @@ $str_filter = isset($arr_args['test']) ? $arr_args['test'] : NULL;
 
 /* Grab override test host if it was passed */
 $str_host = isset($arr_args['host']) ? $arr_args['host'] : '127.0.0.1';
+
+/* Grab password if specified */
+$str_auth = isset($arr_args['auth']) ? $arr_args['auth'] : NULL;
 
 /* Validate the class is known */
 if (!in_array($str_class, $arr_valid_classes)) {
@@ -40,7 +43,7 @@ echo "Using PHP version " . PHP_VERSION . " (" . (PHP_INT_SIZE*8) . " bits)\n";
 echo "Testing class ";
 if ($str_class == 'redis') {
     echo TestSuite::make_bold("Redis") . "\n";
-    exit(TestSuite::run("Redis_Test", $str_filter, $str_host));
+    exit(TestSuite::run("Redis_Test", $str_filter, $str_host, $str_auth));
 } else if ($str_class == 'redisarray') {
     echo TestSuite::make_bold("RedisArray") . "\n";
     global $useIndex;
@@ -58,6 +61,6 @@ if ($str_class == 'redis') {
     }
 } else {
     echo TestSuite::make_bold("RedisCluster") . "\n";
-    exit(TestSuite::run("Redis_Cluster_Test", $str_filter, $str_host));
+    exit(TestSuite::run("Redis_Cluster_Test", $str_filter, $str_host, $str_auth));
 }
 ?>

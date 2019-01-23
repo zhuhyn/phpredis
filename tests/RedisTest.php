@@ -5,7 +5,6 @@ require_once(dirname($_SERVER['PHP_SELF'])."/TestSuite.php");
 class Redis_Test extends TestSuite
 {
     const PORT = 6379;
-    const AUTH = NULL; //replace with a string to use Redis authentication
 
     /* City lat/long */
     protected $cities = Array(
@@ -59,9 +58,10 @@ class Redis_Test extends TestSuite
 
         $r->connect($this->getHost(), self::PORT);
 
-        if(self::AUTH) {
-            $this->assertTrue($r->auth(self::AUTH));
+        if ($this->getAuth()) {
+            $this->assertTrue($r->auth($this->getAuth()));
         }
+
         return $r;
     }
 
@@ -4787,8 +4787,8 @@ class Redis_Test extends TestSuite
     public function testIntrospection() {
         // Simple introspection tests
         $this->assertTrue($this->redis->getHost() === $this->getHost());
+        $this->assertTrue($this->redis->getAuth() === $this->getAuth());
         $this->assertTrue($this->redis->getPort() === self::PORT);
-        $this->assertTrue($this->redis->getAuth() === self::AUTH);
     }
 
     /**
@@ -6034,9 +6034,16 @@ class Redis_Test extends TestSuite
     private function setSessionHandler()
     {
         $host = $this->getHost() ?: 'localhost';
+        $auth = $this->getAuth() ?: NULL;
 
-        @ini_set('session.save_handler', 'redis');
-        @ini_set('session.save_path', 'tcp://' . $host . ':6379');
+        $save_handler = 'redis';
+        $save_path = 'tcp://' . $host . ':6379';
+        if ($auth) {
+            $save_path .= "?auth=$auth";
+        }
+
+        @ini_set('session.save_handler', $save_handler);
+        @ini_set('session.save_path', $save_path);
     }
 
     /**
@@ -6089,6 +6096,7 @@ class Redis_Test extends TestSuite
 
             $command = self::getPhpCommand('startSession.php') . implode(' ', $commandParameters);
             $command .= $background ? ' 2>/dev/null > /dev/null &' : ' 2>&1';
+
             exec($command, $output);
             return ($background || (count($output) == 1 && $output[0] == 'SUCCESS')) ? true : false;
         }
